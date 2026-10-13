@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0f1216"/>
+  <!-- grade do bujo: 4 x 4, com alguns X em verde -->
+  <g fill="none" stroke="#3a4150" stroke-width="10">
+    <rect x="116" y="116" width="280" height="280" rx="16"/>
+    <path d="M186 116V396M256 116V396M326 116V396M116 186H396M116 256H396M116 326H396"/>
+  </g>
+  <g stroke="#5cc08a" stroke-width="16" stroke-linecap="round">
+    <path d="M136 136l30 30M166 136l-30 30"/>
+    <path d="M206 136l30 30M236 136l-30 30"/>
+    <path d="M276 206l30 30M306 206l-30 30"/>
+    <path d="M136 206l30 30M166 206l-30 30"/>
+    <path d="M206 276l30 30M236 276l-30 30"/>
+    <path d="M346 276l30 30M376 276l-30 30"/>
+    <path d="M276 346l30 30M306 346l-30 30"/>
+    <path d="M136 346l30 30M166 346l-30 30"/>
+  </g>
+</svg>

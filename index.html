@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1216">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Journal">
+  <title>Johnny's Journal</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app">
+
+    <!-- ================= HOJE ================= -->
+    <section id="tela-hoje" class="tela">
+      <header class="dia-nav">
+        <button class="icone" id="dia-ant" aria-label="Dia anterior">‹</button>
+        <div class="dia-titulo">
+          <b id="dia-label"></b>
+          <span id="dia-sub"></span>
+        </div>
+        <button class="icone" id="dia-prox" aria-label="Próximo dia">›</button>
+      </header>
+
+      <div id="pm3-card" class="cartao pm3">
+        <div class="linha-base"><span>PM3 até 01/11</span><b id="pm3-pct"></b></div>
+        <div class="barra"><i id="pm3-barra"></i></div>
+        <small id="pm3-txt"></small>
+      </div>
+
+      <div id="lista-habitos"></div>
+
+      <div class="cartao tweet">
+        <label for="tweet"><b>O dia em um tweet</b></label>
+        <textarea id="tweet" maxlength="280" rows="3" placeholder="Toque aqui e use o microfone do teclado para ditar."></textarea>
+        <div class="linha-base"><small class="sutil">vira a linha do dia no bujo</small><small id="tweet-cont">0/280</small></div>
+      </div>
+    </section>
+
+    <!-- ================= ENTREVISTA ================= -->
+    <section id="tela-entrevista" class="tela" hidden>
+      <div id="ent-inicio">
+        <h1>Fale, que eu pergunto.</h1>
+        <p class="sutil">A entrevista passa por alguns temas, um de cada vez. Você responde falando, pode pular qualquer um, e no fim manda tudo para o Claude montar a entrada do diário.</p>
+        <button class="opcao" id="ent-dia">
+          <b>O dia de hoje</b>
+          <span>7 temas: o que aconteceu, coração, mente, música e cultura, corpo, o que lembrar, amanhã</span>
+        </button>
+        <button class="opcao" id="ent-memoria">
+          <b>Uma viagem ou memória</b>
+          <span>Para recuperar Pipa, Buenos Aires ou qualquer coisa que ficou sem registro</span>
+        </button>
+        <div id="ent-memoria-nome" hidden>
+          <label for="memoria-titulo"><b>Sobre o que vamos falar?</b></label>
+          <input id="memoria-titulo" placeholder="Ex.: Pipa, setembro de 2026">
+          <button class="principal" id="ent-memoria-ir">Começar</button>
+        </div>
+        <div id="ent-guardadas"></div>
+      </div>
+
+      <div id="ent-passo" hidden>
+        <div class="ent-topo">
+          <button class="link" id="ent-sair">Sair</button>
+          <span id="ent-prog" class="sutil"></span>
+        </div>
+        <h2 id="ent-tema"></h2>
+        <ul id="ent-perguntas" class="perguntas"></ul>
+        <textarea id="ent-resposta" rows="7" placeholder="Toque em Falar, ou no microfone do teclado."></textarea>
+        <button class="falar" id="ent-falar" aria-pressed="false"><span class="ponto"></span><span id="ent-falar-txt">Falar</span></button>
+        <p id="ent-dica" class="sutil pequena"></p>
+        <div class="ent-botoes">
+          <button class="secundario" id="ent-voltar">Voltar</button>
+          <button class="principal" id="ent-prox">Próximo</button>
+        </div>
+      </div>
+
+      <div id="ent-fim" hidden>
+        <h1>Entrevista guardada.</h1>
+        <p class="sutil">Agora mande para o Claude: ele monta a entrada com as suas palavras e salva no Johnny's Journal.</p>
+        <button class="principal" id="ent-copiar">Copiar para o Claude</button>
+        <button class="secundario" id="ent-ver">Ver o texto</button>
+        <pre id="ent-texto" hidden></pre>
+        <button class="link" id="ent-nova">Voltar ao início</button>
+      </div>
+    </section>
+
+    <!-- ================= MÊS ================= -->
+    <section id="tela-mes" class="tela" hidden>
+      <header class="dia-nav">
+        <button class="icone" id="mes-ant" aria-label="Mês anterior">‹</button>
+        <div class="dia-titulo"><b id="mes-label"></b><span id="mes-sub"></span></div>
+        <button class="icone" id="mes-prox" aria-label="Próximo mês">›</button>
+      </header>
+
+      <div class="caderno">
+        <div class="pagina">
+          <h3>O mês, dia a dia</h3>
+          <ol id="pag-dias" class="dias"></ol>
+        </div>
+        <div class="pagina">
+          <h3>Habit tracker</h3>
+          <div class="grade-wrap"><table id="pag-habitos" class="grade"></table></div>
+        </div>
+      </div>
+
+      <div class="backup">
+        <button class="secundario" id="mes-copiar">Copiar o mês para o Claude</button>
+        <button class="secundario" id="bk-exportar">Salvar cópia de segurança</button>
+        <label class="secundario arquivo">Restaurar cópia<input type="file" id="bk-importar" accept="application/json"></label>
+        <p class="sutil pequena">Tudo fica só neste celular. Salve uma cópia de vez em quando.</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="abas" aria-label="Telas">
+    <button data-tela="hoje" aria-current="page">Hoje</button>
+    <button data-tela="entrevista">Entrevista</button>
+    <button data-tela="mes">Mês</button>
+  </nav>
+
+  <div id="aviso" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
