@@ -93,6 +93,14 @@ function avisar(txt) {
   a.textContent = txt; a.style.opacity = 1;
   clearTimeout(avisoT); avisoT = setTimeout(() => (a.style.opacity = 0), 2800);
 }
+// abre o menu de compartilhar do Android (WhatsApp, Gmail, Keep...); sem ele, copia
+async function enviar(txt) {
+  if (navigator.share) {
+    try { await navigator.share({ title: "Johnny's Journal", text: txt }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  copiar(txt, 'Copiado. Cole no WhatsApp para você mesmo.');
+}
 async function copiar(txt, msg) {
   try { await navigator.clipboard.writeText(txt); avisar(msg); }
   catch (e) {
@@ -273,8 +281,8 @@ function renderGuardadas() {
   itens.forEach(({ rotulo, e }) => {
     const row = document.createElement('div'); row.className = 'guardada';
     row.innerHTML = `<span>${rotulo}</span>`;
-    const c = document.createElement('button'); c.className = 'link'; c.textContent = 'Copiar para o Claude';
-    c.onclick = () => copiar(textoParaClaude(e), 'Copiado. Cole numa conversa com o Claude.');
+    const c = document.createElement('button'); c.className = 'link'; c.textContent = 'Enviar para o PC';
+    c.onclick = () => enviar(textoParaClaude(e));
     row.appendChild(c); box.appendChild(row);
   });
 }
@@ -342,6 +350,7 @@ $('ent-prox').onclick = () => {
 };
 $('ent-sair').onclick = () => { guardarResposta(); voltarInicioEnt(); };
 $('ent-copiar').onclick = () => copiar(textoParaClaude(ent), 'Copiado. Cole numa conversa com o Claude.');
+$('ent-enviar').onclick = () => enviar(textoParaClaude(ent));
 $('ent-ver').onclick = () => { $('ent-texto').hidden = !$('ent-texto').hidden; };
 $('ent-nova').onclick = voltarInicioEnt;
 function voltarInicioEnt() {
@@ -452,7 +461,7 @@ $('mes-copiar').onclick = () => {
     linhas.push(`${pad(i)}/${pad(m + 1)} (${SEM[deChave(k).getDay()]}): ${r.tweet || '(sem tweet)'}\n   feitos: ${ok.join(', ') || 'nenhum'}${r.pm3 ? ` · PM3 ${fmtH(r.pm3)}` : ''}${r.agua ? ` · água ${r.agua}/4` : ''}`);
   }
   const txt = `Johnny's Journal: fechamento de ${MESES[m]} de ${ano}.\nOlhe a constância dos hábitos e os tweets do mês e me ajude no fechamento mensal: o que funcionou, o que falhou, o que muda no mês que vem.\n\n${linhas.join('\n')}`;
-  copiar(txt, 'Mês copiado. Cole numa conversa com o Claude.');
+  enviar(txt);
 };
 $('bk-exportar').onclick = () => {
   const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
