@@ -129,6 +129,15 @@
       </div>
 
       <div class="backup">
+        <div class="cartao sync">
+          <b>Backup automático</b>
+          <p id="sync-status" class="sutil pequena">Desligado: os dados ficam só neste celular.</p>
+          <div id="sync-form">
+            <input id="sync-token" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="cole aqui o token (github_pat_...)">
+            <button class="principal" id="sync-ligar">Ligar backup automático</button>
+          </div>
+          <button class="link" id="sync-agora" hidden>Sincronizar agora</button>
+        </div>
         <button class="secundario" id="mes-copiar">Enviar o mês para o PC</button>
         <button class="secundario" id="bk-exportar">Salvar cópia de segurança</button>
         <label class="secundario arquivo">Restaurar cópia<input type="file" id="bk-importar" accept="application/json"></label>

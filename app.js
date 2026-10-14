@@ -1,5 +1,5 @@
 // Johnny's Journal: tracker de hábitos, entrevista do dia e bujo do mês.
-// Tudo fica no próprio celular (localStorage). Nada sai daqui sem o JV copiar.
+// Tudo fica no celular (localStorage). Com o backup automático ligado, uma cópia vai para o repositório privado de dados.
 'use strict';
 
 const INICIO = '2026-10-13';            // primeiro dia do tracker
@@ -65,8 +65,10 @@ function salvar() {
   if (DEMO) return;
   try { localStorage.setItem(CHAVE, JSON.stringify(dados)); }
   catch (e) { avisar('Não consegui salvar neste navegador.'); }
+  agendarSync();
 }
-const dia = (k) => (dados.dias[k] = dados.dias[k] || { h: {} });
+// dia(k) é chamado antes de toda mudança: o carimbo t decide qual versão vence na sincronização
+const dia = (k) => { const r = (dados.dias[k] = dados.dias[k] || { h: {} }); r.t = Date.now(); return r; };
 const lerDia = (k) => dados.dias[k] || { h: {} };
 
 // ---------- datas ----------
@@ -246,7 +248,7 @@ function guardarResposta() {
 }
 
 function persistirEnt() {
-  const copia = { modo: ent.modo, titulo: ent.titulo, data: ent.data, respostas: ent.respostas };
+  const copia = { modo: ent.modo, titulo: ent.titulo, data: ent.data, respostas: ent.respostas, t: Date.now() };
   if (ent.modo === 'dia') {
     const r = dia(ent.data);
     r.entrevista = copia;
@@ -510,6 +512,7 @@ const passoFeito = (id) => !!(dados.plano && dados.plano[id]);
 function marcarPasso(id) {
   dados.plano = dados.plano || {};
   dados.plano[id] = !dados.plano[id];
+  dados.planoT = Date.now();
   salvar(); renderPlano();
 }
 
@@ -567,6 +570,101 @@ $('plano-trava').onsubmit = async (e) => {
   } catch (err) { avisar('Senha errada (ou sem internet na primeira vez).'); }
 };
 
+// ================= BACKUP AUTOMÁTICO (GitHub privado) =================
+// Grava dados.json no repositório privado JVHubert/johnnys-journal-dados a cada mudança.
+// O token (fine-grained, só esse repositório) fica só neste celular.
+// ?arquivo=outro.json serve só para testes: grava num arquivo separado sem tocar nos dados reais
+const ARQ_DADOS = (new URLSearchParams(location.search).get('arquivo') || 'dados.json').replace(/[^\w.-]/g, '');
+const REPO_DADOS = 'https://api.github.com/repos/JVHubert/johnnys-journal-dados/contents/' + ARQ_DADOS;
+const TOKEN_CHAVE = 'jj-github-token';
+let syncTimer = null, syncRodando = false, syncPendente = false;
+const token = () => { try { return localStorage.getItem(TOKEN_CHAVE); } catch (e) { return null; } };
+// em pedaços: com o diário crescendo, converter tudo de uma vez estoura o limite de argumentos
+function b64Utf8(s) {
+  const u8 = new TextEncoder().encode(s);
+  let bin = '';
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+const utf8B64 = (s) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, '')), (c) => c.charCodeAt(0)));
+
+function statusSync(txt) { $('sync-status').textContent = txt; }
+function agendarSync() {
+  if (DEMO || !token()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(sincronizar, 2500);
+}
+
+// junta o que está no celular com o que está no GitHub: em cada dia, vence a versão mais recente
+function juntar(local, remoto) {
+  const r = { dias: { ...remoto.dias }, memorias: [], plano: {}, planoT: 0 };
+  for (const [k, d] of Object.entries(local.dias)) if (!r.dias[k] || (d.t || 0) >= (r.dias[k].t || 0)) r.dias[k] = d;
+  const mems = new Map();
+  for (const m of [...(remoto.memorias || []), ...(local.memorias || [])]) {
+    const k = m.titulo + '|' + m.data;
+    if (!mems.has(k) || (m.t || 0) >= (mems.get(k).t || 0)) mems.set(k, m);
+  }
+  r.memorias = [...mems.values()];
+  const pl = (local.planoT || 0) >= (remoto.planoT || 0) ? local : remoto;
+  r.plano = { ...(pl.plano || {}) }; r.planoT = pl.planoT || 0;
+  return r;
+}
+
+async function sincronizar() {
+  const tk = token(); if (!tk || DEMO) return;
+  if (syncRodando) { syncPendente = true; return; }
+  syncRodando = true;
+  const cab = { Authorization: `Bearer ${tk}`, Accept: 'application/vnd.github+json' };
+  try {
+    let ok = false;
+    for (let tentativa = 0; tentativa < 3 && !ok; tentativa++) {
+      let sha, remoto = { dias: {}, memorias: [] };
+      const g = await fetch(REPO_DADOS + '?ref=main&t=' + Date.now(), { headers: cab, cache: 'no-store' });
+      if (g.status === 401 || g.status === 403) throw new Error('token');
+      if (g.ok) { const j = await g.json(); sha = j.sha; remoto = JSON.parse(utf8B64(j.content)); }
+      else if (g.status !== 404) throw new Error('rede');
+      const junto = juntar(dados, remoto);
+      const mudouLocal = JSON.stringify(junto) !== JSON.stringify(dados);
+      dados = junto;
+      try { localStorage.setItem(CHAVE, JSON.stringify(dados)); } catch (e) { /* segue */ }
+      if (mudouLocal) renderTudo();
+      if (sha && JSON.stringify(junto) === JSON.stringify(remoto)) { ok = true; break; }   // nada novo para enviar
+      const p = await fetch(REPO_DADOS, {
+        method: 'PUT', headers: cab,
+        body: JSON.stringify({ message: `dados ${new Date().toISOString().slice(0, 16)}`, content: b64Utf8(JSON.stringify(dados, null, 1)), sha, branch: 'main' }),
+      });
+      if (p.ok) { ok = true; break; }
+      if (p.status === 401 || p.status === 403) throw new Error('token');
+      if (p.status !== 409 && p.status !== 422) throw new Error('rede');   // conflito: lê de novo e junta
+    }
+    if (!ok) throw new Error('conflito');
+    const h = new Date();
+    statusSync(`Ligado. Último backup às ${pad(h.getHours())}:${pad(h.getMinutes())}.`);
+  } catch (e) {
+    statusSync(e.message === 'token' ? 'O GitHub recusou o token. Cole um token novo.' : e.message === 'conflito' ? 'Não consegui gravar o backup. Toque em Sincronizar agora.' : 'Sem internet agora: tento de novo depois.');
+    if (e.message === 'token') { $('sync-form').hidden = false; }
+  } finally {
+    syncRodando = false;
+    if (syncPendente) { syncPendente = false; agendarSync(); }
+  }
+}
+
+function renderSync() {
+  const ligado = !!token();
+  $('sync-form').hidden = ligado;
+  $('sync-agora').hidden = !ligado;
+  if (!ligado) statusSync('Desligado: os dados ficam só neste celular.');
+}
+$('sync-ligar').onclick = async () => {
+  const tk = $('sync-token').value.trim();
+  if (!tk) { avisar('Cole o token primeiro.'); return; }
+  try { localStorage.setItem(TOKEN_CHAVE, tk); } catch (e) { avisar('Este navegador não deixou guardar o token.'); return; }
+  $('sync-token').value = ''; renderSync(); statusSync('Conectando…');
+  await sincronizar();
+};
+$('sync-agora').onclick = () => { statusSync('Sincronizando…'); sincronizar(); };
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); });
+
 // ================= abas =================
 function irPara(tela) {
   pararGravacao();
@@ -589,6 +687,8 @@ document.addEventListener('visibilitychange', () => {
 let ultimoHoje = hoje();
 
 renderTudo();
+renderSync();
+sincronizar();
 const inicial = new URLSearchParams(location.search).get('tela');
 if (inicial) irPara(inicial);
 

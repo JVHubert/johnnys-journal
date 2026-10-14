@@ -1,4 +1,4 @@
-﻿# Johnny's Journal
+# Johnny's Journal
 
 App pessoal do JV (PWA) com três telas:
 
@@ -6,7 +6,7 @@ App pessoal do JV (PWA) com três telas:
 - **Entrevista**: perguntas por tema, respondidas por voz; o texto é copiado para o Claude montar a entrada do diário.
 - **Mês**: bujo com a página dos dias (tweets) e a página do habit tracker.
 
-Os registros ficam só no celular (localStorage). Nada é enviado para servidor.
+Os registros ficam no celular (localStorage). Se o JV ligar o backup automático, o app grava uma cópia no repositório privado JVHubert/johnnys-journal-dados, com um token que só existe no celular dele.
 
 Abrir com `?demo` mostra dados inventados, sem salvar nada.
 
