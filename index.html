@@ -97,15 +97,23 @@
         <button class="icone" id="mes-prox" aria-label="Próximo mês">›</button>
       </header>
 
-      <div class="caderno">
-        <div class="pagina">
-          <h3>O mês, dia a dia</h3>
-          <ol id="pag-dias" class="dias"></ol>
+      <div class="seg" role="group" aria-label="O que ver">
+        <button id="vis-tweets" aria-pressed="true">Tweets</button>
+        <button id="vis-panorama" aria-pressed="false">Panorama mensal</button>
+      </div>
+
+      <div id="mes-tweets">
+        <ol id="lista-tweets" class="tweets"></ol>
+      </div>
+
+      <div id="mes-panorama" hidden>
+        <div class="cartao resumo">
+          <b id="pan-media"></b>
+          <span class="sutil">constância média do mês</span>
+          <p id="pan-frase"></p>
         </div>
-        <div class="pagina">
-          <h3>Habit tracker</h3>
-          <div class="grade-wrap"><table id="pag-habitos" class="grade"></table></div>
-        </div>
+        <div id="pan-habitos"></div>
+        <p class="sutil pequena legenda"><i class="c ok"></i> feito <i class="c nao"></i> não feito <i class="c fut"></i> ainda não chegou</p>
       </div>
 
       <div class="backup">

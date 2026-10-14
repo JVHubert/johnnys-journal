@@ -75,7 +75,7 @@ const pad = (n) => String(n).padStart(2, '0');
 const chave = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const deChave = (k) => { const [a, m, d] = k.split('-').map(Number); return new Date(a, m - 1, d); };
 const somaDias = (k, n) => { const d = deChave(k); d.setDate(d.getDate() + n); return chave(d); };
-const hoje = () => chave(new Date());
+const hoje = () => (DEMO ? '2026-10-30' : chave(new Date()));
 const fds = (k) => [0, 6].includes(deChave(k).getDay());
 const ativo = (h, k) => k >= INICIO && (!h.ate || k <= h.ate);
 
@@ -279,15 +279,22 @@ function renderGuardadas() {
   });
 }
 
-// voz
-function pararGravacao() { if (rec && gravando) rec.stop(); }
-$('ent-falar').onclick = () => {
-  if (gravando) { pararGravacao(); return; }
-  rec = new SR();
-  rec.lang = 'pt-BR'; rec.continuous = true; rec.interimResults = true;
+// voz: no Android o reconhecimento desliga sozinho depois de uma pausa,
+// então religamos até o JV tocar em parar. Assim dá para falar com calma.
+function pararGravacao() {
+  gravando = false;
+  if (rec) { try { rec.stop(); } catch (e) { /* já parado */ } }
+}
+function fimGravacao() {
+  $('ent-falar').setAttribute('aria-pressed', 'false'); $('ent-falar-txt').textContent = 'Falar';
+  $('ent-resposta').value = $('ent-resposta').value.trim();
+}
+function ouvir() {
   const area = $('ent-resposta');
   const base = area.value ? area.value.replace(/\s*$/, ' ') : '';
   let final = '';
+  rec = new SR();
+  rec.lang = 'pt-BR'; rec.continuous = true; rec.interimResults = true;
   rec.onresult = (ev) => {
     let parcial = '';
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -298,17 +305,19 @@ $('ent-falar').onclick = () => {
     $('ent-prox').textContent = ent.passo === ENTREVISTAS[ent.modo].length - 1 ? 'Terminar' : 'Próximo';
   };
   rec.onerror = (ev) => {
+    if (ev.error === 'no-speech' || ev.error === 'aborted') return;   // silêncio: só religa
+    gravando = false;
     avisar(ev.error === 'not-allowed' ? 'Permita o microfone para este app.' : 'Não consegui ouvir. Use o microfone do teclado.');
   };
-  rec.onend = () => {
-    gravando = false;
-    $('ent-falar').setAttribute('aria-pressed', 'false'); $('ent-falar-txt').textContent = 'Falar';
-    area.value = area.value.trim();
-  };
+  rec.onend = () => { if (gravando) { try { ouvir(); } catch (e) { gravando = false; fimGravacao(); } } else fimGravacao(); };
+  rec.start();
+}
+$('ent-falar').onclick = () => {
+  if (gravando) { pararGravacao(); return; }
   try {
-    rec.start(); gravando = true;
+    gravando = true; ouvir();
     $('ent-falar').setAttribute('aria-pressed', 'true'); $('ent-falar-txt').textContent = 'Ouvindo… toque para parar';
-  } catch (e) { avisar('Não consegui ligar o microfone.'); }
+  } catch (e) { gravando = false; avisar('Não consegui ligar o microfone.'); }
 };
 
 $('ent-resposta').addEventListener('input', () => {
@@ -340,68 +349,94 @@ function voltarInicioEnt() {
   mostrarEnt('ent-inicio'); renderGuardadas();
 }
 
-// ================= MÊS (bujo) =================
+// ================= MÊS =================
 let mesRef = deChave(atual); mesRef.setDate(1);
+let visao = 'tweets';
+try { visao = localStorage.getItem('jj-visao-mes') || 'tweets'; } catch (e) { /* padrão */ }
+
+function diasDoMes() {
+  const ano = mesRef.getFullYear(), m = mesRef.getMonth();
+  const n = new Date(ano, m + 1, 0).getDate();
+  return Array.from({ length: n }, (_, i) => chave(new Date(ano, m, i + 1)));
+}
+const pctHabito = (h, ks) => {
+  const passados = ks.filter((k) => ativo(h, k) && k <= hoje());
+  return passados.length ? Math.round((passados.filter((k) => feito(h, k)).length / passados.length) * 100) : null;
+};
 
 function renderMes() {
   const ano = mesRef.getFullYear(), m = mesRef.getMonth();
-  const nDias = new Date(ano, m + 1, 0).getDate();
-  const ks = Array.from({ length: nDias }, (_, i) => chave(new Date(ano, m, i + 1)));
   $('mes-label').textContent = `${MESES[m][0].toUpperCase() + MESES[m].slice(1)} de ${ano}`;
   const primeiro = deChave(INICIO);
   $('mes-ant').disabled = ano < primeiro.getFullYear() || (ano === primeiro.getFullYear() && m <= primeiro.getMonth());
+  const ks = diasDoMes();
+  const ps = HABITOS.map((h) => pctHabito(h, ks)).filter((p) => p !== null);
+  $('mes-sub').textContent = ps.length ? `constância média: ${Math.round(ps.reduce((a, b) => a + b, 0) / ps.length)}%` : '';
+  $('vis-tweets').setAttribute('aria-pressed', String(visao === 'tweets'));
+  $('vis-panorama').setAttribute('aria-pressed', String(visao === 'panorama'));
+  $('mes-tweets').hidden = visao !== 'tweets';
+  $('mes-panorama').hidden = visao !== 'panorama';
+  if (visao === 'tweets') renderTweets(ks); else renderPanorama(ks);
+}
 
-  // página 1: um dia por linha
-  $('pag-dias').innerHTML = ks.map((k) => {
+// tweets: um dia por linha, do mais recente para o mais antigo; tocar abre o dia
+function renderTweets(ks) {
+  const dias = ks.filter((k) => k >= INICIO && k <= hoje()).reverse();
+  const lista = $('lista-tweets');
+  if (!dias.length) { lista.innerHTML = '<li class="sutil" style="padding:14px 2px">Nada registrado neste mês.</li>'; return; }
+  lista.innerHTML = dias.map((k) => {
     const d = deChave(k), r = lerDia(k);
-    const txt = r.tweet ? esc(r.tweet) : '';
-    return `<li class="${fds(k) ? 'fds' : ''}"><span class="n">${d.getDate()}<small>${SEM1[d.getDay()]}</small></span><span class="${txt ? '' : 'vazio'}">${txt}</span></li>`;
+    const ativos = HABITOS.filter((h) => ativo(h, k));
+    const n = ativos.filter((h) => feito(h, k)).length;
+    const txt = r.tweet ? `<span>${esc(r.tweet)}</span>` : '<span class="vazio">sem tweet: toque para escrever</span>';
+    return `<li class="${k === hoje() ? 'hoje' : ''}"><button data-dia="${k}">
+      <span class="data"><b>${d.getDate()}</b><span>${SEM[d.getDay()].slice(0, 3)}</span></span>
+      <span class="txt">${txt}<span class="meta">${n} de ${ativos.length} hábitos${r.pm3 ? ` · PM3 ${fmtH(r.pm3)}` : ''}</span></span>
+    </button></li>`;
   }).join('');
+  lista.querySelectorAll('button[data-dia]').forEach((b) => (b.onclick = () => {
+    atual = b.dataset.dia; irPara('hoje'); setTimeout(() => $('tweet').focus(), 50);
+  }));
+}
 
-  // página 2: hábitos (dias nas linhas, hábitos nas colunas, como o caderno virado)
+// panorama: uma faixa por hábito, um quadradinho por dia
+function renderPanorama(ks) {
+  const n = ks.length, cols = `repeat(${n}, 1fr)`;
   const hs = HABITOS.filter((h) => ks.some((k) => ativo(h, k)));
-  let html = '<thead><tr><th></th>' + hs.map((h) => `<th><span>${h.curto}</span></th>`).join('') + '</tr></thead><tbody>';
-  for (const k of ks) {
-    const d = deChave(k), r = lerDia(k);
-    html += `<tr><th>${d.getDate()}<small>${SEM1[d.getDay()]}</small></th>`;
-    for (const h of hs) {
-      if (!ativo(h, k)) { html += '<td class="fora"></td>'; continue; }
-      if (h.tipo === 'horas') { html += `<td class="num">${r.pm3 ? fmtH(r.pm3).replace('h', '') : ''}</td>`; continue; }
-      html += `<td class="x">${feito(h, k) ? '×' : ''}</td>`;
-    }
-    html += '</tr>';
-  }
-  html += '</tbody><tfoot><tr><th>%</th>';
-  let somaP = 0, nP = 0;
-  for (const h of hs) {
-    const passados = ks.filter((k) => ativo(h, k) && k <= hoje());
-    if (!passados.length) { html += '<td></td>'; continue; }
-    const p = Math.round((passados.filter((k) => feito(h, k)).length / passados.length) * 100);
-    somaP += p; nP++;
-    html += `<td>${p}</td>`;
-  }
-  html += '</tr></tfoot>';
-  $('pag-habitos').innerHTML = html;
-  $('mes-sub').textContent = nP ? `constância média: ${Math.round(somaP / nP)}%` : '';
-  alinharPaginas();
+  const linhas = hs.map((h) => {
+    const p = pctHabito(h, ks);
+    const celulas = ks.map((k) => {
+      const cls = [];
+      let estilo = '';
+      if (!ativo(h, k)) cls.push('fora');
+      else if (k > hoje()) cls.push('fut');
+      else {
+        const r = lerDia(k);
+        // água e PM3 acendem aos poucos: meia garrafa de verde também conta como esforço
+        const parcial = h.tipo === 'agua' ? (r.agua || 0) / 4 : h.tipo === 'horas' ? Math.min(1, (r.pm3 || 0) / 2.5) : null;
+        if (feito(h, k)) cls.push('ok');
+        if (parcial !== null && parcial > 0 && parcial < 1) estilo = ` style="background:rgba(92,192,138,${0.25 + parcial * 0.55})"`;
+      }
+      if (k === hoje()) cls.push('hoje');
+      return `<i class="${cls.join(' ')}"${estilo}></i>`;
+    }).join('');
+    return { h, p, html: `<div class="pan-h"><div class="pan-top"><span>${h.nome}</span><b class="${p !== null && p < 50 ? 'fraco' : ''}">${p === null ? '–' : p + '%'}</b></div><div class="faixa" style="grid-template-columns:${cols}">${celulas}</div></div>` };
+  });
+  const regua = ks.map((k) => { const d = deChave(k).getDate(); return `<span>${d === 1 || d % 5 === 0 ? d : ''}</span>`; }).join('');
+  $('pan-habitos').innerHTML = linhas.map((l) => l.html).join('') + `<div class="reguas" style="grid-template-columns:${cols}">${regua}</div>`;
+
+  const comP = linhas.filter((l) => l.p !== null);
+  if (!comP.length) { $('pan-media').textContent = '–'; $('pan-frase').textContent = 'Ainda não há dias registrados neste mês.'; return; }
+  const media = Math.round(comP.reduce((a, l) => a + l.p, 0) / comP.length);
+  const ord = comP.slice().sort((a, b) => b.p - a.p);
+  $('pan-media').textContent = media + '%';
+  $('pan-frase').textContent = ord.length > 1
+    ? `Mais firme: ${ord[0].h.nome} (${ord[0].p}%). O que mais escapou: ${ord[ord.length - 1].h.nome} (${ord[ord.length - 1].p}%).`
+    : '';
 }
 
-// no computador as páginas ficam lado a lado: o dia 1 da esquerda começa na altura do dia 1 da direita
-function alinharPaginas() {
-  const lista = $('pag-dias');
-  lista.style.marginTop = '';
-  const lado = matchMedia('(min-width: 900px)').matches;
-  const li = lista.firstElementChild, tr = $('pag-habitos').tBodies[0]?.rows[0];
-  if (!lado || !li || !tr || $('tela-mes').hidden) return;
-  let m = 0;
-  for (let i = 0; i < 3; i++) {   // mede de novo: a margem mexe no layout em volta
-    lista.style.marginTop = m + 'px';
-    m = Math.max(0, m + tr.getBoundingClientRect().top - li.getBoundingClientRect().top);
-  }
-  lista.style.marginTop = m + 'px';
-}
-addEventListener('resize', alinharPaginas);
-const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+$('vis-tweets').onclick = () => { visao = 'tweets'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };
+$('vis-panorama').onclick = () => { visao = 'panorama'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 $('mes-ant').onclick = () => { mesRef.setMonth(mesRef.getMonth() - 1); renderMes(); };
 $('mes-prox').onclick = () => { mesRef.setMonth(mesRef.getMonth() + 1); renderMes(); };
