@@ -300,16 +300,14 @@ function fimGravacao() {
 function ouvir() {
   const area = $('ent-resposta');
   const base = area.value ? area.value.replace(/\s*$/, ' ') : '';
-  let final = '';
   rec = new SR();
-  rec.lang = 'pt-BR'; rec.continuous = true; rec.interimResults = true;
+  // Uma frase por sessão (continuous = false) e religa no onend. No Chrome do Android,
+  // o modo contínuo reenvia o que já foi dito e o texto saía repetido 4 vezes.
+  rec.lang = 'pt-BR'; rec.continuous = false; rec.interimResults = true;
   rec.onresult = (ev) => {
-    let parcial = '';
-    for (let i = ev.resultIndex; i < ev.results.length; i++) {
-      const t = ev.results[i][0].transcript;
-      if (ev.results[i].isFinal) final += t + ' '; else parcial += t;
-    }
-    area.value = base + final + parcial;
+    // cada evento traz a frase inteira até agora: substitui em vez de somar
+    const frase = Array.from(ev.results).map((r) => r[0].transcript).join(' ').trim();
+    area.value = base + frase;
     $('ent-prox').textContent = ent.passo === ENTREVISTAS[ent.modo].length - 1 ? 'Terminar' : 'Próximo';
   };
   rec.onerror = (ev) => {
