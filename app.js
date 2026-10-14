@@ -9,7 +9,7 @@ const PM3_META_HORAS = 30;              // ≈ 53h de curso assistidas em 1,75x
 const HABITOS = [
   { id: 'acordar', nome: 'Acordei às 7h', grupo: 'Manhã', curto: 'Acordei 7h' },
   { id: 'treino', nome: 'Exercício', grupo: 'Manhã', curto: 'Exercício' },
-  { id: 'agua', nome: 'Água', sub: '4 garrafas de 710 mL', grupo: 'Durante o dia', tipo: 'agua', curto: 'Água' },
+  { id: 'agua', nome: 'Água', sub: 'meta: 3 garrafas de 710 mL · a 4ª é bônus', grupo: 'Durante o dia', tipo: 'agua', curto: 'Água' },
   { id: 'macros', nome: 'Macros + budget', sub: 'anotar calorias e despesas', grupo: 'Durante o dia', curto: 'Macros + budget' },
   { id: 'pm3', nome: 'PM3', sub: 'horas assistidas hoje', grupo: 'Durante o dia', tipo: 'horas', ate: PM3_FIM, curto: 'PM3' },
   { id: 'semp', nome: 'Sem p + TikTok', grupo: 'Durante o dia', curto: 'Sem p + TikTok' },
@@ -81,7 +81,7 @@ const ativo = (h, k) => k >= INICIO && (!h.ate || k <= h.ate);
 
 function feito(h, k) {
   const d = lerDia(k);
-  if (h.tipo === 'agua') return (d.agua || 0) >= 4;
+  if (h.tipo === 'agua') return (d.agua || 0) >= 3;   // 3 garrafas batem a meta; a 4ª é bônus
   if (h.tipo === 'horas') return (d.pm3 || 0) > 0;
   return !!d.h[h.id];
 }
@@ -162,7 +162,7 @@ function linhaHabito(h, reg) {
   if (h.tipo === 'agua') {
     const el = document.createElement('div'); el.className = 'habito';
     const n = reg.agua || 0;
-    el.innerHTML = `<span class="txt">${h.nome}<small>${n} de 4 · ${h.sub}</small></span><span class="garrafas"></span>`;
+    el.innerHTML = `<span class="txt">${h.nome}<small>${n >= 4 ? '4 garrafas: meta + bônus' : n >= 3 ? 'meta batida · a 4ª é bônus' : `${n} de 3 · ${h.sub}`}</small></span><span class="garrafas"></span>`;
     const box = el.querySelector('.garrafas');
     for (let i = 1; i <= 4; i++) {
       const b = document.createElement('button');
@@ -358,8 +358,8 @@ function voltarInicioEnt() {
 
 // ================= MÊS =================
 let mesRef = deChave(atual); mesRef.setDate(1);
-let visao = 'tweets';
-try { visao = localStorage.getItem('jj-visao-mes') || 'tweets'; } catch (e) { /* padrão */ }
+let visao = 'plano';
+try { visao = localStorage.getItem('jj-visao-mes') || 'plano'; } catch (e) { /* padrão */ }
 
 function diasDoMes() {
   const ano = mesRef.getFullYear(), m = mesRef.getMonth();
@@ -379,11 +379,13 @@ function renderMes() {
   const ks = diasDoMes();
   const ps = HABITOS.map((h) => pctHabito(h, ks)).filter((p) => p !== null);
   $('mes-sub').textContent = ps.length ? `constância média: ${Math.round(ps.reduce((a, b) => a + b, 0) / ps.length)}%` : '';
+  $('vis-plano').setAttribute('aria-pressed', String(visao === 'plano'));
+  $('mes-plano').hidden = visao !== 'plano';
   $('vis-tweets').setAttribute('aria-pressed', String(visao === 'tweets'));
   $('vis-panorama').setAttribute('aria-pressed', String(visao === 'panorama'));
   $('mes-tweets').hidden = visao !== 'tweets';
   $('mes-panorama').hidden = visao !== 'panorama';
-  if (visao === 'tweets') renderTweets(ks); else renderPanorama(ks);
+  if (visao === 'plano') renderPlano(); else if (visao === 'tweets') renderTweets(ks); else renderPanorama(ks);
 }
 
 // tweets: um dia por linha, do mais recente para o mais antigo; tocar abre o dia
@@ -420,7 +422,7 @@ function renderPanorama(ks) {
       else {
         const r = lerDia(k);
         // água e PM3 acendem aos poucos: meia garrafa de verde também conta como esforço
-        const parcial = h.tipo === 'agua' ? (r.agua || 0) / 4 : h.tipo === 'horas' ? Math.min(1, (r.pm3 || 0) / 2.5) : null;
+        const parcial = h.tipo === 'agua' ? (r.agua || 0) / 3 : h.tipo === 'horas' ? Math.min(1, (r.pm3 || 0) / 2.5) : null;
         if (feito(h, k)) cls.push('ok');
         if (parcial !== null && parcial > 0 && parcial < 1) estilo = ` style="background:rgba(92,192,138,${0.25 + parcial * 0.55})"`;
       }
@@ -442,6 +444,7 @@ function renderPanorama(ks) {
     : '';
 }
 
+$('vis-plano').onclick = () => { visao = 'plano'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };
 $('vis-tweets').onclick = () => { visao = 'tweets'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };
 $('vis-panorama').onclick = () => { visao = 'panorama'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -477,6 +480,91 @@ $('bk-importar').onchange = async (e) => {
     dados = { memorias: [], ...novo }; salvar(); renderTudo(); avisar('Cópia restaurada.');
   } catch (err) { avisar('Esse arquivo não é uma cópia do Journal.'); }
   e.target.value = '';
+};
+
+// ================= PLANO (cifrado) =================
+// plano.enc.json é público, mas cifrado (AES-GCM, chave tirada da senha com PBKDF2).
+// A senha fica só neste celular. O que o JV marca como feito vai em dados.plano.
+let plano = null;
+const SENHA_CHAVE = 'jj-senha-plano';
+const deB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+async function abrirPlano(senha) {
+  const r = await fetch('plano.enc.json', { cache: 'no-store' });
+  const p = await r.json();
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
+  const chave = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: deB64(p.sal), iterations: p.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const claro = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: deB64(p.iv) }, chave, deB64(p.dados));
+  return JSON.parse(new TextDecoder().decode(claro));
+}
+
+async function carregarPlano() {
+  let s = null;
+  try { s = localStorage.getItem(SENHA_CHAVE); } catch (e) { /* sem senha guardada */ }
+  if (!s) return false;
+  try { plano = await abrirPlano(s); return true; }
+  catch (e) { return false; }
+}
+
+const passoFeito = (id) => !!(dados.plano && dados.plano[id]);
+function marcarPasso(id) {
+  dados.plano = dados.plano || {};
+  dados.plano[id] = !dados.plano[id];
+  salvar(); renderPlano();
+}
+
+function htmlPasso(p) {
+  return `<button class="passo" data-id="${p.id}" aria-pressed="${passoFeito(p.id)}"><span class="chk"></span>
+    <span class="txt">${esc(p.txt)}${p.quando ? `<small>${esc(p.quando)}</small>` : ''}</span></button>`;
+}
+
+function renderPlano() {
+  const box = $('plano-conteudo');
+  if (!plano) {
+    $('plano-trava').hidden = false; box.innerHTML = '';
+    carregarPlano().then((ok) => { if (ok) renderPlano(); });
+    return;
+  }
+  $('plano-trava').hidden = true;
+  const k = `${mesRef.getFullYear()}-${pad(mesRef.getMonth() + 1)}`;
+  const mes = plano.meses[k];
+  if (!mes) { box.innerHTML = '<p class="sutil" style="margin-top:16px">Ainda não há plano para este mês. No fim do mês anterior, o Claude escreve o próximo.</p>'; return; }
+
+  const todos = [...mes.foco.passos, ...mes.temas.flatMap((t) => t.passos || [])];
+  const feitos = todos.filter((p) => passoFeito(p.id)).length;
+  const pct = todos.length ? Math.round((feitos / todos.length) * 100) : 0;
+
+  box.innerHTML = `
+    <h2 class="plano-titulo">${esc(mes.titulo)}</h2>
+    <div class="cartao">
+      <div class="linha-base"><span>${feitos} de ${todos.length} passos feitos</span><b>${pct}%</b></div>
+      <div class="barra"><i style="width:${pct}%"></i></div>
+    </div>
+    <div class="foco-mes">
+      <div class="rotulo">Foco do mês · ${esc(mes.foco.n)} ${esc(mes.foco.nome)}</div>
+      <p class="sutil pequena">Feito quando: ${esc(mes.foco.feitoQuando)}</p>
+      ${mes.foco.passos.map(htmlPasso).join('')}
+    </div>
+    <div class="grupo">Em segundo plano, uma ação pequena por semana</div>
+    ${mes.temas.map((t) => `
+      <div class="tema-plano">
+        <div class="tema-nome"><span class="sutil">${esc(t.n)}</span> ${esc(t.nome)}</div>
+        ${t.espera ? `<p class="sutil pequena espera">${esc(t.espera)}</p>` : t.passos.map(htmlPasso).join('')}
+      </div>`).join('')}
+    <p class="sutil pequena" style="margin-top:18px">Plano de ${plano.versao.split('-').reverse().join('/')}. Todo domingo, conte ao Claude o que andou; ele atualiza o plano e o app recebe sozinho.</p>`;
+  box.querySelectorAll('.passo').forEach((b) => (b.onclick = () => marcarPasso(b.dataset.id)));
+}
+
+$('plano-trava').onsubmit = async (e) => {
+  e.preventDefault();
+  const s = $('plano-senha').value.trim().toLowerCase();
+  if (!s) return;
+  try {
+    plano = await abrirPlano(s);
+    try { localStorage.setItem(SENHA_CHAVE, s); } catch (err) { /* abre só nesta sessão */ }
+    $('plano-senha').value = '';
+    renderPlano();
+  } catch (err) { avisar('Senha errada (ou sem internet na primeira vez).'); }
 };
 
 // ================= abas =================

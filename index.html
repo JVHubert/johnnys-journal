@@ -98,12 +98,23 @@
         <button class="icone" id="mes-prox" aria-label="Próximo mês">›</button>
       </header>
 
-      <div class="seg" role="group" aria-label="O que ver">
-        <button id="vis-tweets" aria-pressed="true">Tweets</button>
-        <button id="vis-panorama" aria-pressed="false">Panorama mensal</button>
+      <div class="seg seg3" role="group" aria-label="O que ver">
+        <button id="vis-plano" aria-pressed="true">Plano</button>
+        <button id="vis-tweets" aria-pressed="false">Tweets</button>
+        <button id="vis-panorama" aria-pressed="false">Panorama</button>
       </div>
 
-      <div id="mes-tweets">
+      <div id="mes-plano" hidden>
+        <form id="plano-trava" hidden>
+          <h2>O plano é só seu.</h2>
+          <p class="sutil">Ele fica guardado com senha, porque o código do app é público. Digite a senha uma vez; este celular lembra.</p>
+          <input id="plano-senha" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="xxxx-xxxx-xxxx">
+          <button class="principal" type="submit">Abrir o plano</button>
+        </form>
+        <div id="plano-conteudo"></div>
+      </div>
+
+      <div id="mes-tweets" hidden>
         <ol id="lista-tweets" class="tweets"></ol>
       </div>
 

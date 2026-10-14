@@ -161,3 +161,23 @@ textarea, input {
   body { background: #fff; padding: 0; }
   .abas, .backup, .dia-nav button, #aviso { display: none !important; }
 }
+
+/* plano do mês */
+.seg3 { grid-template-columns: repeat(3, 1fr); }
+.plano-titulo { margin-top: 4px; }
+.foco-mes { background: var(--s1); border-radius: 14px; padding: 14px 14px 4px; margin-top: 14px; border-left: 3px solid var(--ac); }
+.foco-mes .rotulo { color: var(--ac); font-weight: 700; }
+.foco-mes .passo:first-of-type { border-top: 0; }
+.tema-plano { padding-top: 12px; }
+.tema-nome { font-weight: 600; margin-bottom: 2px; }
+.passo {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; min-height: 52px;
+  background: transparent; border: 0; border-top: 1px solid var(--linha); padding: 10px 2px;
+}
+.passo .txt { flex: 1; }
+.passo small { display: block; color: var(--tx2); font-size: 13px; }
+.passo[aria-pressed="true"] .chk { background: var(--ac); border-color: var(--ac); }
+.passo[aria-pressed="true"] .chk::after { content: ""; width: 8px; height: 14px; border: solid var(--bg); border-width: 0 3px 3px 0; transform: rotate(45deg) translate(-1px, -1px); }
+.passo[aria-pressed="true"] .txt { color: var(--tx2); text-decoration: line-through; text-decoration-color: #4a525e; }
+.espera { margin: 0 0 4px; font-style: italic; }
+.cartao .barra { margin-bottom: 0; }
