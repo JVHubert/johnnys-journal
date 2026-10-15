@@ -1,6 +1,6 @@
 // Guarda os arquivos no aparelho para o app abrir sem internet.
 // Aumente a versão a cada publicação para os celulares baixarem a nova.
-const VERSAO = 'journal-v6';
+const VERSAO = 'journal-v7';
 const ARQUIVOS = [
   './',
   'index.html',
@@ -35,6 +35,9 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request)),
+    caches.match(e.request, { ignoreSearch: true })
+      .then((hit) => hit || fetch(e.request))
+      // sem a página no cache e sem internet: entrega o app guardado em vez de uma tela vazia
+      .catch(() => (e.request.mode === 'navigate' ? caches.match('./') : Response.error())),
   );
 });

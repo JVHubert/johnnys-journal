@@ -2,6 +2,20 @@
 // Tudo fica no celular (localStorage). Com o backup automático ligado, uma cópia vai para o repositório privado de dados.
 'use strict';
 
+// Se algo quebrar, mostra o erro na tela (em vez de uma tela preta) com um botão para recarregar.
+function mostrarFalha(msg) {
+  if (document.getElementById('falha')) return;
+  const box = document.createElement('div');
+  box.id = 'falha';
+  box.setAttribute('role', 'alert');
+  box.innerHTML = '<b>O app travou.</b><p>Toque em recarregar. Se repetir, mande um print desta mensagem para o Claude.</p><code></code><button class="principal">Recarregar</button>';
+  box.querySelector('code').textContent = String(msg || 'erro desconhecido').slice(0, 300);
+  box.querySelector('button').onclick = () => location.reload();
+  document.body.appendChild(box);
+}
+window.addEventListener('error', (e) => mostrarFalha(e.message));
+window.addEventListener('unhandledrejection', (e) => mostrarFalha(e.reason && (e.reason.message || e.reason)));
+
 const INICIO = '2026-10-13';            // primeiro dia do tracker
 const PM3_FIM = '2026-11-01';           // fim da licença da PM3
 const PM3_META_HORAS = 30;              // ≈ 53h de curso assistidas em 1,75x
@@ -666,7 +680,9 @@ $('sync-agora').onclick = () => { statusSync('Sincronizando…'); sincronizar();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); });
 
 // ================= abas =================
+let telaAtual = 'hoje';
 function irPara(tela) {
+  telaAtual = tela;
   pararGravacao();
   document.querySelectorAll('.tela').forEach((s) => (s.hidden = s.id !== 'tela-' + tela));
   document.querySelectorAll('.abas button').forEach((b) => b.toggleAttribute('aria-current', b.dataset.tela === tela));
@@ -685,6 +701,27 @@ document.addEventListener('visibilitychange', () => {
   ultimoHoje = hoje();
 });
 let ultimoHoje = hoje();
+
+// O Firefox do Android congela ou descarta a página quando ela fica parada em segundo plano.
+// Ao voltar: redesenha a tela atual e, se mesmo assim ela estiver vazia, recarrega.
+let escondidoEm = 0;
+function voltarDoSegundoPlano() {
+  try {
+    if (telaAtual === 'hoje') renderHoje();
+    if (telaAtual === 'mes') renderMes();
+    if (telaAtual === 'entrevista' && !ent) renderGuardadas();
+    document.body.style.display = 'none'; void document.body.offsetHeight; document.body.style.display = '';   // força repintar
+  } catch (e) { mostrarFalha(e.message); return; }
+  setTimeout(() => {
+    const tela = document.querySelector('.tela:not([hidden])');
+    if (!tela || tela.getBoundingClientRect().height < 80) location.reload();
+  }, 1200);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { escondidoEm = Date.now(); return; }
+  if (escondidoEm && Date.now() - escondidoEm > 15000) voltarDoSegundoPlano();
+});
+window.addEventListener('pageshow', (e) => { if (e.persisted) voltarDoSegundoPlano(); });
 
 renderTudo();
 renderSync();

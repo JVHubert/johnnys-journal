@@ -181,3 +181,7 @@ textarea, input {
 .passo[aria-pressed="true"] .txt { color: var(--tx2); text-decoration: line-through; text-decoration-color: #4a525e; }
 .espera { margin: 0 0 4px; font-style: italic; }
 .cartao .barra { margin-bottom: 0; }
+/* aviso de falha (no lugar de uma tela preta) */
+#falha { position: fixed; inset: auto 12px calc(90px + env(safe-area-inset-bottom)) 12px; z-index: 50; background: #2a1d1d; border: 1px solid #6b3b3b; border-radius: 14px; padding: 16px; }
+#falha p { margin: 6px 0 8px; }
+#falha code { display: block; font-size: 13px; color: #e0b2b2; word-break: break-word; }
