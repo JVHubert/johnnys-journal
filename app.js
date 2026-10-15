@@ -165,6 +165,8 @@ function renderHoje() {
 
   $('tweet').value = reg.tweet || '';
   $('tweet-cont').textContent = `${(reg.tweet || '').length}/280`;
+  $('tweet-nota').hidden = !reg.tweetRascunho;
+  renderCartaoEntrevista(reg);
 }
 
 // regra dos dois dias: avisa se ontem também ficou sem
@@ -216,7 +218,8 @@ function fmtH(h) {
 $('dia-ant').onclick = () => { if (atual > INICIO) { atual = somaDias(atual, -1); renderHoje(); } };
 $('dia-prox').onclick = () => { atual = somaDias(atual, 1); renderHoje(); };
 $('tweet').addEventListener('input', (e) => {
-  const r = dia(atual); r.tweet = e.target.value;
+  const r = dia(atual); r.tweet = e.target.value; r.tweetRascunho = false;
+  $('tweet-nota').hidden = true;
   if (r.tweet.trim()) r.h.journal = true;
   $('tweet-cont').textContent = `${r.tweet.length}/280`;
   salvar();
@@ -296,9 +299,13 @@ function renderGuardadas() {
   box.innerHTML = '<h2>Guardadas</h2>';
   itens.forEach(({ rotulo, e }) => {
     const row = document.createElement('div'); row.className = 'guardada';
-    row.innerHTML = `<span>${rotulo}</span>`;
-    const c = document.createElement('button'); c.className = 'link'; c.textContent = 'Enviar para o PC';
-    c.onclick = () => enviar(textoParaClaude(e));
+    const n = e.respostas.filter(Boolean).length;
+    row.innerHTML = `<span>${esc(rotulo)}<small class="sutil"> · ${n} de ${ENTREVISTAS[e.modo].length} temas</small></span>`;
+    const c = document.createElement('button'); c.className = 'link'; c.textContent = 'Abrir';
+    c.onclick = () => {
+      if (e.modo === 'dia') { iniciarEnt('dia'); return; }
+      ent = { ...e, passo: 0 }; mostrarEnt('ent-passo'); renderPasso();
+    };
     row.appendChild(c); box.appendChild(row);
   });
 }
@@ -358,19 +365,76 @@ $('ent-voltar').onclick = () => { guardarResposta(); ent.passo--; renderPasso();
 $('ent-prox').onclick = () => {
   guardarResposta();
   if (ent.passo < ENTREVISTAS[ent.modo].length - 1) { ent.passo++; renderPasso(); return; }
-  mostrarEnt('ent-fim');
-  $('ent-texto').hidden = true;
-  $('ent-texto').textContent = textoParaClaude(ent);
+  if (ent.modo === 'dia') concluirDia(); else concluirMemoria();
 };
 $('ent-sair').onclick = () => { guardarResposta(); voltarInicioEnt(); };
-$('ent-copiar').onclick = () => copiar(textoParaClaude(ent), 'Copiado. Cole numa conversa com o Claude.');
-$('ent-enviar').onclick = () => enviar(textoParaClaude(ent));
-$('ent-ver').onclick = () => { $('ent-texto').hidden = !$('ent-texto').hidden; };
+$('ent-compartilhar').onclick = () => { if (memoriaFeita) enviar(textoParaClaude(memoriaFeita)); };
 $('ent-nova').onclick = voltarInicioEnt;
 function voltarInicioEnt() {
   ent = null; $('ent-memoria-nome').hidden = true; $('memoria-titulo').value = '';
   mostrarEnt('ent-inicio'); renderGuardadas();
 }
+
+// rascunho do tweet a partir das respostas (o JV revisa na tela Hoje)
+function rascunhoTweet(e) {
+  // "Para lembrar" diz o essencial do dia; sem ele, "O que aconteceu"
+  let t = (e.respostas[5] || e.respostas[0] || e.respostas.find(Boolean) || '').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  t = t[0].toUpperCase() + t.slice(1);
+  if (t.length > 280) { t = t.slice(0, 279); t = t.slice(0, t.lastIndexOf(' ')) + '…'; }
+  else if (!/[.!?…]$/.test(t)) t += '.';
+  return t;
+}
+
+// sincroniza na hora e conta o resultado
+async function sincronizarAgora(msgOk) {
+  clearTimeout(syncTimer);
+  const r = await sincronizar();
+  if (r === 'ok') avisar(msgOk + ' Backup feito.');
+  else if (r === 'desligado') avisar(msgOk + ' Ligue o backup automático em Mês.');
+  else if (r === 'na-fila') avisar(msgOk);
+  else avisar(msgOk + ' O backup vai assim que tiver internet.');
+}
+
+// fim da entrevista do dia: guarda, faz o rascunho do tweet e leva para a tela Hoje
+function concluirDia() {
+  const data = ent.data;
+  persistirEnt();
+  const r = dia(data);
+  if (!r.tweet || r.tweetRascunho) {
+    const tw = rascunhoTweet(ent);
+    if (tw) { r.tweet = tw; r.tweetRascunho = true; r.h.journal = true; }
+  }
+  salvar();
+  ent = null; mostrarEnt('ent-inicio');
+  atual = data;
+  irPara('hoje');
+  setTimeout(() => {
+    const card = document.querySelector('.tweet');
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 80);
+  sincronizarAgora('Entrevista guardada. Revise o tweet.');
+}
+
+// fim de uma memória: guarda e sincroniza; o Claude lê do backup
+let memoriaFeita = null;
+function concluirMemoria() {
+  persistirEnt();
+  memoriaFeita = { modo: ent.modo, titulo: ent.titulo, data: ent.data, respostas: ent.respostas.slice() };
+  $('ent-fim-titulo').textContent = `"${ent.titulo}" está guardada.`;
+  ent = null;
+  mostrarEnt('ent-fim');
+  sincronizarAgora('Memória guardada.');
+}
+
+function renderCartaoEntrevista(reg) {
+  const e = reg.entrevista;
+  const n = e ? e.respostas.filter(Boolean).length : 0;
+  $('ent-hoje-status').textContent = n ? `feita · ${n} de ${ENTREVISTAS.dia.length} temas` : 'ainda não';
+  $('ent-hoje-btn').textContent = n ? 'Rever ou completar a entrevista' : 'Fazer a entrevista do dia';
+  $('ent-hoje-btn').className = n ? 'secundario' : 'principal';
+}
+$('ent-hoje-btn').onclick = () => { irPara('entrevista'); iniciarEnt('dia'); };
 
 // ================= MÊS =================
 let mesRef = deChave(atual); mesRef.setDate(1);
@@ -625,8 +689,8 @@ function juntar(local, remoto) {
 }
 
 async function sincronizar() {
-  const tk = token(); if (!tk || DEMO) return;
-  if (syncRodando) { syncPendente = true; return; }
+  const tk = token(); if (!tk || DEMO) return 'desligado';
+  if (syncRodando) { syncPendente = true; return 'na-fila'; }
   syncRodando = true;
   const cab = { Authorization: `Bearer ${tk}`, Accept: 'application/vnd.github+json' };
   try {
@@ -654,9 +718,11 @@ async function sincronizar() {
     if (!ok) throw new Error('conflito');
     const h = new Date();
     statusSync(`Ligado. Último backup às ${pad(h.getHours())}:${pad(h.getMinutes())}.`);
+    return 'ok';
   } catch (e) {
     statusSync(e.message === 'token' ? 'O GitHub recusou o token. Cole um token novo.' : e.message === 'conflito' ? 'Não consegui gravar o backup. Toque em Sincronizar agora.' : 'Sem internet agora: tento de novo depois.');
     if (e.message === 'token') { $('sync-form').hidden = false; }
+    return 'erro';
   } finally {
     syncRodando = false;
     if (syncPendente) { syncPendente = false; agendarSync(); }

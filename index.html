@@ -35,8 +35,14 @@
 
       <div id="lista-habitos"></div>
 
+      <div class="cartao ent-hoje">
+        <div class="linha-base"><b>Entrevista do dia</b><small id="ent-hoje-status" class="sutil"></small></div>
+        <button class="principal" id="ent-hoje-btn">Fazer a entrevista do dia</button>
+      </div>
+
       <div class="cartao tweet">
         <label for="tweet"><b>O dia em um tweet</b></label>
+        <p id="tweet-nota" class="nota" hidden>Rascunho feito com a sua entrevista. Revise e ajuste do seu jeito.</p>
         <textarea id="tweet" maxlength="280" rows="3" placeholder="Toque aqui e use o microfone do teclado para ditar."></textarea>
         <div class="linha-base"><small class="sutil">vira a linha do dia no bujo</small><small id="tweet-cont">0/280</small></div>
       </div>
@@ -46,7 +52,7 @@
     <section id="tela-entrevista" class="tela" hidden>
       <div id="ent-inicio">
         <h1>Fale, que eu pergunto.</h1>
-        <p class="sutil">A entrevista passa por alguns temas, um de cada vez. Você responde falando, pode pular qualquer um, e no fim manda tudo para o Claude montar a entrada do diário.</p>
+        <p class="sutil">A entrevista passa por alguns temas, um de cada vez. Você responde falando e pode pular qualquer um. No fim, ela vai sozinha para o backup, e o Claude lê de lá para montar a entrada do diário.</p>
         <button class="opcao" id="ent-dia">
           <b>O dia de hoje</b>
           <span>7 temas: o que aconteceu, coração, mente, música e cultura, corpo, o que lembrar, amanhã</span>
@@ -80,13 +86,10 @@
       </div>
 
       <div id="ent-fim" hidden>
-        <h1>Entrevista guardada.</h1>
-        <p class="sutil">Agora leve o texto para o PC (WhatsApp para você mesmo, Gmail ou Keep) e cole na conversa com o Claude. Ele monta a entrada com as suas palavras e salva no Johnny's Journal.</p>
-        <button class="principal" id="ent-enviar">Enviar para o PC</button>
-        <button class="secundario" id="ent-copiar">Copiar o texto</button>
-        <button class="secundario" id="ent-ver">Ver o texto</button>
-        <pre id="ent-texto" hidden></pre>
-        <button class="link" id="ent-nova">Voltar ao início</button>
+        <h1 id="ent-fim-titulo">Memória guardada.</h1>
+        <p class="sutil">Ela já foi para o backup. Na próxima conversa, diga ao Claude "tem memória nova no journal": ele lê de lá e monta a entrada.</p>
+        <button class="principal" id="ent-nova">Voltar ao início</button>
+        <button class="link" id="ent-compartilhar">Compartilhar o texto com alguém</button>
       </div>
     </section>
 
@@ -138,7 +141,7 @@
           </div>
           <button class="link" id="sync-agora" hidden>Sincronizar agora</button>
         </div>
-        <button class="secundario" id="mes-copiar">Enviar o mês para o PC</button>
+        <button class="secundario" id="mes-copiar">Compartilhar o mês</button>
         <button class="secundario" id="bk-exportar">Salvar cópia de segurança</button>
         <label class="secundario arquivo">Restaurar cópia<input type="file" id="bk-importar" accept="application/json"></label>
         <p class="sutil pequena">Tudo fica só neste celular. Salve uma cópia de vez em quando.</p>
