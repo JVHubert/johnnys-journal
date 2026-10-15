@@ -43,6 +43,12 @@
       <div class="cartao tweet">
         <label for="tweet"><b>O dia em um tweet</b></label>
         <p id="tweet-nota" class="nota" hidden>Rascunho feito com a sua entrevista. Revise e ajuste do seu jeito.</p>
+        <p id="tweet-claude" class="sutil pequena" hidden>Escrito pelo Claude a partir da sua entrevista. Pode editar à vontade.</p>
+        <div id="sug-box" class="sugestao" hidden>
+          <small class="sutil">O Claude sugeriu outro tweet:</small>
+          <p id="sug-texto"></p>
+          <div class="sug-botoes"><button class="secundario" id="sug-usar">Usar</button><button class="link" id="sug-ignorar">Manter o meu</button></div>
+        </div>
         <textarea id="tweet" maxlength="280" rows="3" placeholder="Toque aqui e use o microfone do teclado para ditar."></textarea>
         <div class="linha-base"><small class="sutil">vira a linha do dia no bujo</small><small id="tweet-cont">0/280</small></div>
       </div>

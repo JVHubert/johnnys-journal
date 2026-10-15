@@ -166,6 +166,11 @@ function renderHoje() {
   $('tweet').value = reg.tweet || '';
   $('tweet-cont').textContent = `${(reg.tweet || '').length}/280`;
   $('tweet-nota').hidden = !reg.tweetRascunho;
+  $('tweet-claude').hidden = !reg.tweetDoClaude;
+  const sug = (dados.sugestoes || {})[atual];
+  const mostrarSug = sug && sug.tweet !== reg.tweet && !reg.tweetRascunho && reg.sugRecusada !== sug.t;
+  $('sug-box').hidden = !mostrarSug;
+  if (mostrarSug) $('sug-texto').textContent = sug.tweet;
   renderCartaoEntrevista(reg);
 }
 
@@ -218,13 +223,36 @@ function fmtH(h) {
 $('dia-ant').onclick = () => { if (atual > INICIO) { atual = somaDias(atual, -1); renderHoje(); } };
 $('dia-prox').onclick = () => { atual = somaDias(atual, 1); renderHoje(); };
 $('tweet').addEventListener('input', (e) => {
-  const r = dia(atual); r.tweet = e.target.value; r.tweetRascunho = false;
+  const r = dia(atual); r.tweet = e.target.value; r.tweetRascunho = false; r.tweetDoClaude = false;
+  $('tweet-claude').hidden = true;
   $('tweet-nota').hidden = true;
   if (r.tweet.trim()) r.h.journal = true;
   $('tweet-cont').textContent = `${r.tweet.length}/280`;
   salvar();
 });
 $('tweet').addEventListener('change', renderHoje);
+
+// O tweet do Claude entra sozinho se o dia está sem tweet ou só com o rascunho automático.
+// Se o JV já escreveu o dele, a sugestão aparece com "Usar" e nada é trocado sem ele tocar.
+function aplicarSugestoes() {
+  let mudou = false;
+  for (const [k, s] of Object.entries(dados.sugestoes || {})) {
+    const atualDia = dados.dias[k];
+    if (atualDia && atualDia.tweetClaudeT === s.t) continue;          // essa sugestão já foi usada
+    if (atualDia && atualDia.tweet && !atualDia.tweetRascunho) continue; // o JV escreveu o dele
+    const r = dia(k);
+    r.tweet = s.tweet; r.tweetRascunho = false; r.tweetDoClaude = true; r.tweetClaudeT = s.t; r.h.journal = true;
+    mudou = true;
+  }
+  return mudou;
+}
+$('sug-usar').onclick = () => {
+  const s = dados.sugestoes[atual]; if (!s) return;
+  const r = dia(atual);
+  r.tweet = s.tweet; r.tweetRascunho = false; r.tweetDoClaude = true; r.tweetClaudeT = s.t;
+  salvar(); renderHoje(); avisar('Tweet do Claude aplicado.');
+};
+$('sug-ignorar').onclick = () => { const s = dados.sugestoes[atual]; if (!s) return; dia(atual).sugRecusada = s.t; salvar(); renderHoje(); };
 
 // ================= ENTREVISTA =================
 let ent = null;   // { modo, titulo, data, passo, respostas: [] }
@@ -685,6 +713,9 @@ function juntar(local, remoto) {
   r.memorias = [...mems.values()];
   const pl = (local.planoT || 0) >= (remoto.planoT || 0) ? local : remoto;
   r.plano = { ...(pl.plano || {}) }; r.planoT = pl.planoT || 0;
+  // sugestões de tweet do Claude: ficam fora dos dias para nunca sobrescrever o que o JV marcou
+  r.sugestoes = { ...(remoto.sugestoes || {}) };
+  for (const [k, s] of Object.entries(local.sugestoes || {})) if (!r.sugestoes[k] || (s.t || 0) >= (r.sugestoes[k].t || 0)) r.sugestoes[k] = s;
   return r;
 }
 
@@ -705,6 +736,7 @@ async function sincronizar() {
       const mudouLocal = JSON.stringify(junto) !== JSON.stringify(dados);
       dados = junto;
       try { localStorage.setItem(CHAVE, JSON.stringify(dados)); } catch (e) { /* segue */ }
+      if (aplicarSugestoes()) { try { localStorage.setItem(CHAVE, JSON.stringify(dados)); } catch (e) { /* segue */ } }
       if (mudouLocal) renderTudo();
       if (sha && JSON.stringify(junto) === JSON.stringify(remoto)) { ok = true; break; }   // nada novo para enviar
       const p = await fetch(REPO_DADOS, {

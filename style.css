@@ -189,3 +189,8 @@ textarea, input {
 .ent-hoje .principal, .ent-hoje .secundario { margin-bottom: 0; }
 .nota { margin: 6px 0 0; font-size: 14px; color: #e0b25c; }
 .guardada small { font-size: 13px; }
+/* sugestão de tweet do Claude */
+.sugestao { background: var(--s2); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.sugestao p { margin: 4px 0 6px; }
+.sug-botoes { display: flex; gap: 12px; align-items: center; }
+.sug-botoes .secundario { width: auto; margin: 0; padding: 8px 18px; }
