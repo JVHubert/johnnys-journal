@@ -6,7 +6,11 @@
   --linha: #2b313a;
   --tx: #e7e5e0;
   --tx2: #9aa1ab;
-  --ac: #5cc08a;          /* verde: a cor do progresso no diário */
+  --ac: #5cc08a;
+  --parcial: #2f6b4b;     /* verde mais apagado: meta feita em parte */
+  --erro: #e5534b;        /* vermelho: não feito */
+  --na: #4a515c;          /* cinza: não se aplica */
+  --vazio: #20252c;       /* sem marcação */          /* verde: a cor do progresso no diário */
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -53,8 +57,6 @@ button { cursor: pointer; }
 .habito small { display: block; color: var(--tx2); font-size: 13px; }
 .habito .aviso2 { color: #e0b25c; }
 .chk { flex: none; width: 30px; height: 30px; border-radius: 8px; border: 2px solid #4a525e; display: grid; place-items: center; }
-.habito[aria-pressed="true"] .chk { background: var(--ac); border-color: var(--ac); }
-.habito[aria-pressed="true"] .chk::after { content: ""; width: 8px; height: 14px; border: solid var(--bg); border-width: 0 3px 3px 0; transform: rotate(45deg) translate(-1px, -1px); }
 .garrafas { display: flex; gap: 6px; }
 .garrafa { width: 26px; height: 40px; border-radius: 7px 7px 6px 6px; border: 2px solid #4a525e; position: relative; overflow: hidden; background: transparent; padding: 0; }
 .garrafa.cheia { border-color: var(--ac); }
@@ -123,26 +125,44 @@ textarea, input {
 
 .resumo b { display: block; font-size: 44px; line-height: 1; color: var(--ac); }
 .resumo p { margin: 10px 0 0; }
-.pan-h { padding: 14px 0 12px; border-top: 1px solid var(--linha); }
-.pan-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-.pan-top b { font-variant-numeric: tabular-nums; }
-.pan-top .fraco { color: var(--tx2); font-weight: 600; }
+/* panorama: nome · faixa de dias · % na mesma linha */
+.pan-h { display: grid; grid-template-columns: 104px 1fr 40px; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--linha); }
+.pan-nome { font-size: 14px; line-height: 1.2; }
+.pan-pct { text-align: right; font-size: 15px; font-variant-numeric: tabular-nums; }
+.pan-pct.fraco { color: var(--tx2); font-weight: 600; }
+.pan-regua { border-top: 0; padding-top: 2px; }
 .faixa { display: grid; gap: 2px; }
-.faixa i { display: block; aspect-ratio: 1 / 1.6; border-radius: 2px; background: #262c35; }
-.faixa i.ok { background: var(--ac); }
+.faixa i { display: block; height: 18px; border-radius: 2px; background: var(--vazio); }
+.faixa i.ok, .legenda .ok { background: var(--ac); }
+.faixa i.parcial, .legenda .parcial { background: var(--parcial); }
+.faixa i.x, .legenda .x { background: var(--erro); }
+.faixa i.na, .legenda .na { background: var(--na); }
+.faixa i.vazio, .legenda .vazio { background: var(--vazio); }
 .faixa i.fut { background: transparent; box-shadow: inset 0 0 0 1px #2b313a; }
 .faixa i.fora { background: transparent; }
 .faixa i.hoje { outline: 2px solid var(--tx); outline-offset: 1px; }
-.reguas { display: grid; gap: 2px; margin-top: 4px; font-size: 11px; color: var(--tx2); }
+.reguas { display: grid; gap: 2px; font-size: 11px; color: var(--tx2); }
 .reguas span { overflow: visible; white-space: nowrap; }
-.legenda { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.legenda .c { display: inline-block; width: 12px; height: 16px; border-radius: 2px; vertical-align: -3px; margin-right: 2px; }
-.legenda .ok { background: var(--ac); }
-.legenda .nao { background: #262c35; }
-.legenda .fut { box-shadow: inset 0 0 0 1px #3a4150; }.backup { margin-top: 18px; max-width: 520px; }
-.arquivo { position: relative; overflow: hidden; }
-.arquivo input { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; }
+.legenda { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.legenda span { white-space: nowrap; }
+.legenda .c { display: inline-block; width: 12px; height: 16px; border-radius: 2px; vertical-align: -3px; margin-right: 5px; }
 
+/* hábitos de tocar: três estados */
+.habito[data-estado="ok"] .chk { background: var(--ac); border-color: var(--ac); color: var(--bg); }
+.habito[data-estado="x"] .chk { border-color: var(--erro); color: var(--erro); }
+.habito[data-estado="na"] .chk { border-color: var(--na); background: var(--na); color: var(--tx); }
+.habito[data-estado="na"] .txt { color: var(--tx2); }
+.chk { font-size: 19px; font-weight: 700; line-height: 1; }
+.dica-toque { margin: 10px 0 0; }
+.dica-toque .ok { color: var(--ac); } .dica-toque .x { color: var(--erro); } .dica-toque .na { color: var(--tx); }
+
+/* voltar para hoje / para este mês */
+.ir-hoje { display: block; margin: 2px auto 0; padding: 2px 6px; font-size: 14px; color: var(--ac); }
+
+/* backup: uma linha discreta no fim da tela Hoje */
+.sync { margin-top: 18px; }
+.sync p { margin: 0; }
+.sync .link { padding: 0 0 0 6px; }
 /* abas */
 .abas {
   position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(3, 1fr);
@@ -159,7 +179,7 @@ textarea, input {
 
 @media print {
   body { background: #fff; padding: 0; }
-  .abas, .backup, .dia-nav button, #aviso { display: none !important; }
+  .abas, .sync, .dia-nav button, #aviso { display: none !important; }
 }
 
 /* plano do mês */

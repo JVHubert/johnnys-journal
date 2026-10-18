@@ -71,7 +71,7 @@ if (DEMO) {
   const frases = ['Treino cedo, PM3 rendeu, jantar com o pai.', 'Dia pesado no trabalho, mas li antes de dormir.', 'Corrida de 10 km e sol no fim da tarde.', '', 'Conversa boa com o Igor sobre o México.'];
   for (let i = 0; i < 18; i++) {
     const d = new Date(2026, 9, 13 + i), k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const s = (n) => (i * 7 + n * 3) % 5 !== 0;
+    const s = (n) => [true, true, 'x', true, 'na', true, true][(i * 3 + n * 5) % 7];   // feito, não feito e não se aplica
     dados.dias[k] = { h: { acordar: s(1), treino: s(2), macros: s(3), semp: s(4), leitura: s(5), celular: s(6), journal: s(7) }, agua: (i * 3) % 5, pm3: i < 15 ? [2, 2.5, 3, 1.5][i % 4] : 0, tweet: frases[i % 5] };
   }
 }
@@ -95,12 +95,20 @@ const hoje = () => (DEMO ? '2026-10-30' : chave(new Date()));
 const fds = (k) => [0, 6].includes(deChave(k).getDay());
 const ativo = (h, k) => k >= INICIO && (!h.ate || k <= h.ate);
 
-function feito(h, k) {
-  const d = lerDia(k);
-  if (h.tipo === 'agua') return (d.agua || 0) >= 3;   // 3 garrafas batem a meta; a 4ª é bônus
-  if (h.tipo === 'horas') return (d.pm3 || 0) > 0;
-  return !!d.h[h.id];
+// Estado de um hábito num dia:
+//   'ok' feito · 'parcial' meta pela metade (água, PM3) · 'x' não feito · 'na' não se aplica · '' sem registro
+// Nos hábitos de tocar, d.h[id] vale true (feito), 'x' (não feito) ou 'na' (não se aplica).
+const metaPm3 = (k) => (fds(k) ? 3 : 2.5);
+function estado(h, k) {
+  const d = lerDia(k), v = d.h[h.id];
+  if (v === 'na') return 'na';
+  if (h.tipo === 'agua') { const n = d.agua || 0; return n >= 3 ? 'ok' : n > 0 ? 'parcial' : '';   } // 3 garrafas batem a meta; a 4ª é bônus
+  if (h.tipo === 'horas') { const n = d.pm3 || 0; return n >= metaPm3(k) ? 'ok' : n > 0 ? 'parcial' : ''; }
+  return v === true ? 'ok' : v === 'x' ? 'x' : '';
 }
+const feito = (h, k) => estado(h, k) === 'ok';
+// conta para a constância: dias passados em que o hábito valia (não se aplica fica de fora)
+const conta = (h, k) => ativo(h, k) && k <= hoje() && estado(h, k) !== 'na';
 
 // ---------- aviso ----------
 let avisoT;
@@ -132,7 +140,9 @@ let atual = hoje() < INICIO ? INICIO : hoje();
 function renderHoje() {
   const d = deChave(atual), reg = lerDia(atual);
   $('dia-label').textContent = `${SEM[d.getDay()]}, ${d.getDate()} de ${MESES[d.getMonth()]}`;
-  $('dia-sub').textContent = atual === hoje() ? 'hoje' : (atual === somaDias(hoje(), -1) ? 'ontem' : '');
+  const ehHoje = atual === hoje();
+  $('dia-sub').textContent = ehHoje ? 'hoje' : atual === somaDias(hoje(), -1) ? 'ontem' : atual === somaDias(hoje(), 1) ? 'amanhã' : '';
+  $('ir-hoje').hidden = ehHoje;
   $('dia-ant').disabled = atual <= INICIO;
 
   // PM3
@@ -177,15 +187,17 @@ function renderHoje() {
 // regra dos dois dias: avisa se ontem também ficou sem
 function avisoDoisDias(h) {
   const ontem = somaDias(atual, -1);
-  if (!ativo(h, ontem) || feito(h, atual) || feito(h, ontem)) return '';
-  return atual === hoje() ? 'ontem ficou sem: hoje é o dia' : '';
+  if (!ativo(h, ontem) || atual !== hoje()) return '';
+  const firme = (e) => e === 'ok' || e === 'na';
+  if (firme(estado(h, atual)) || firme(estado(h, ontem))) return '';
+  return 'ontem ficou sem: hoje é o dia';
 }
 
 function linhaHabito(h, reg) {
   if (h.tipo === 'agua') {
     const el = document.createElement('div'); el.className = 'habito';
     const n = reg.agua || 0;
-    el.innerHTML = `<span class="txt">${h.nome}<small>${n >= 4 ? '4 garrafas: meta + bônus' : n >= 3 ? 'meta batida · a 4ª é bônus' : `${n} de 3 · ${h.sub}`}</small></span><span class="garrafas"></span>`;
+    el.innerHTML = `<span class="txt">${h.nome}<small>${n >= 4 ? '4 garrafas: meta + bônus' : n >= 3 ? 'meta batida · a 4ª é bônus' : `${n} de 3 garrafas · a 4ª é bônus`}</small></span><span class="garrafas"></span>`;
     const box = el.querySelector('.garrafas');
     for (let i = 1; i <= 4; i++) {
       const b = document.createElement('button');
@@ -208,10 +220,18 @@ function linhaHabito(h, reg) {
   }
   const b = document.createElement('button');
   b.className = 'habito';
-  b.setAttribute('aria-pressed', String(!!reg.h[h.id]));
+  const e = estado(h, atual);
+  b.dataset.estado = e || 'vazio';
+  b.setAttribute('aria-label', `${h.nome}: ${{ ok: 'feito', x: 'não feito', na: 'não se aplica' }[e] || 'sem marcação'}. Toque para mudar.`);
   const av = avisoDoisDias(h);
-  b.innerHTML = `<span class="chk"></span><span class="txt">${h.nome}${h.sub ? `<small>${h.sub}</small>` : ''}${av ? `<small class="aviso2">${av}</small>` : ''}</span>`;
-  b.onclick = () => { const r = dia(atual); r.h[h.id] = !r.h[h.id]; salvar(); renderHoje(); };
+  b.innerHTML = `<span class="chk">${{ ok: '✓', x: '✗', na: '–' }[e] || ''}</span><span class="txt">${h.nome}${h.sub ? `<small>${h.sub}</small>` : ''}${e === 'na' ? '<small>não se aplica hoje</small>' : ''}${av ? `<small class="aviso2">${av}</small>` : ''}</span>`;
+  // cada toque passa para o próximo: vazio → feito → não feito → não se aplica → vazio
+  b.onclick = () => {
+    const r = dia(atual), v = r.h[h.id];
+    const prox = v === true ? 'x' : v === 'x' ? 'na' : v === 'na' ? null : true;
+    if (prox === null) delete r.h[h.id]; else r.h[h.id] = prox;
+    salvar(); renderHoje();
+  };
   return b;
 }
 
@@ -222,6 +242,7 @@ function fmtH(h) {
 
 $('dia-ant').onclick = () => { if (atual > INICIO) { atual = somaDias(atual, -1); renderHoje(); } };
 $('dia-prox').onclick = () => { atual = somaDias(atual, 1); renderHoje(); };
+$('ir-hoje').onclick = () => { atual = hoje(); renderHoje(); };
 $('tweet').addEventListener('input', (e) => {
   const r = dia(atual); r.tweet = e.target.value; r.tweetRascunho = false; r.tweetDoClaude = false;
   $('tweet-claude').hidden = true;
@@ -475,13 +496,14 @@ function diasDoMes() {
   return Array.from({ length: n }, (_, i) => chave(new Date(ano, m, i + 1)));
 }
 const pctHabito = (h, ks) => {
-  const passados = ks.filter((k) => ativo(h, k) && k <= hoje());
-  return passados.length ? Math.round((passados.filter((k) => feito(h, k)).length / passados.length) * 100) : null;
+  const vale = ks.filter((k) => conta(h, k));
+  return vale.length ? Math.round((vale.filter((k) => feito(h, k)).length / vale.length) * 100) : null;
 };
 
 function renderMes() {
   const ano = mesRef.getFullYear(), m = mesRef.getMonth();
   $('mes-label').textContent = `${MESES[m][0].toUpperCase() + MESES[m].slice(1)} de ${ano}`;
+  $('ir-mes').hidden = ano === deChave(hoje()).getFullYear() && m === deChave(hoje()).getMonth();
   const primeiro = deChave(INICIO);
   $('mes-ant').disabled = ano < primeiro.getFullYear() || (ano === primeiro.getFullYear() && m <= primeiro.getMonth());
   const ks = diasDoMes();
@@ -503,7 +525,7 @@ function renderTweets(ks) {
   if (!dias.length) { lista.innerHTML = '<li class="sutil" style="padding:14px 2px">Nada registrado neste mês.</li>'; return; }
   lista.innerHTML = dias.map((k) => {
     const d = deChave(k), r = lerDia(k);
-    const ativos = HABITOS.filter((h) => ativo(h, k));
+    const ativos = HABITOS.filter((h) => ativo(h, k) && estado(h, k) !== 'na');
     const n = ativos.filter((h) => feito(h, k)).length;
     const txt = r.tweet ? `<span>${esc(r.tweet)}</span>` : '<span class="vazio">sem tweet: toque para escrever</span>';
     return `<li class="${k === hoje() ? 'hoje' : ''}"><button data-dia="${k}">
@@ -516,31 +538,24 @@ function renderTweets(ks) {
   }));
 }
 
-// panorama: uma faixa por hábito, um quadradinho por dia
+// panorama: uma linha por hábito (nome, um quadradinho por dia, % à direita)
 function renderPanorama(ks) {
   const n = ks.length, cols = `repeat(${n}, 1fr)`;
   const hs = HABITOS.filter((h) => ks.some((k) => ativo(h, k)));
   const linhas = hs.map((h) => {
     const p = pctHabito(h, ks);
     const celulas = ks.map((k) => {
-      const cls = [];
-      let estilo = '';
-      if (!ativo(h, k)) cls.push('fora');
-      else if (k > hoje()) cls.push('fut');
-      else {
-        const r = lerDia(k);
-        // água e PM3 acendem aos poucos: meia garrafa de verde também conta como esforço
-        const parcial = h.tipo === 'agua' ? (r.agua || 0) / 3 : h.tipo === 'horas' ? Math.min(1, (r.pm3 || 0) / 2.5) : null;
-        if (feito(h, k)) cls.push('ok');
-        if (parcial !== null && parcial > 0 && parcial < 1) estilo = ` style="background:rgba(92,192,138,${0.25 + parcial * 0.55})"`;
-      }
-      if (k === hoje()) cls.push('hoje');
-      return `<i class="${cls.join(' ')}"${estilo}></i>`;
+      let cls;
+      if (!ativo(h, k)) cls = 'fora';
+      else if (k > hoje()) cls = 'fut';
+      else cls = estado(h, k) || 'vazio';
+      return `<i class="${cls}${k === hoje() ? ' hoje' : ''}"></i>`;
     }).join('');
-    return { h, p, html: `<div class="pan-h"><div class="pan-top"><span>${h.nome}</span><b class="${p !== null && p < 50 ? 'fraco' : ''}">${p === null ? '–' : p + '%'}</b></div><div class="faixa" style="grid-template-columns:${cols}">${celulas}</div></div>` };
+    return { h, p, html: `<div class="pan-h"><span class="pan-nome">${h.curto}</span><div class="faixa" style="grid-template-columns:${cols}">${celulas}</div><b class="pan-pct${p !== null && p < 50 ? ' fraco' : ''}">${p === null ? '–' : p + '%'}</b></div>` };
   });
   const regua = ks.map((k) => { const d = deChave(k).getDate(); return `<span>${d === 1 || d % 5 === 0 ? d : ''}</span>`; }).join('');
-  $('pan-habitos').innerHTML = linhas.map((l) => l.html).join('') + `<div class="reguas" style="grid-template-columns:${cols}">${regua}</div>`;
+  $('pan-habitos').innerHTML = linhas.map((l) => l.html).join('') +
+    `<div class="pan-h pan-regua"><span></span><div class="reguas" style="grid-template-columns:${cols}">${regua}</div><span></span></div>`;
 
   const comP = linhas.filter((l) => l.p !== null);
   if (!comP.length) { $('pan-media').textContent = '–'; $('pan-frase').textContent = 'Ainda não há dias registrados neste mês.'; return; }
@@ -551,45 +566,13 @@ function renderPanorama(ks) {
     ? `Mais firme: ${ord[0].h.nome} (${ord[0].p}%). O que mais escapou: ${ord[ord.length - 1].h.nome} (${ord[ord.length - 1].p}%).`
     : '';
 }
-
 $('vis-plano').onclick = () => { visao = 'plano'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };
 $('vis-tweets').onclick = () => { visao = 'tweets'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };
 $('vis-panorama').onclick = () => { visao = 'panorama'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 $('mes-ant').onclick = () => { mesRef.setMonth(mesRef.getMonth() - 1); renderMes(); };
 $('mes-prox').onclick = () => { mesRef.setMonth(mesRef.getMonth() + 1); renderMes(); };
-$('mes-copiar').onclick = () => {
-  const ano = mesRef.getFullYear(), m = mesRef.getMonth();
-  const nDias = new Date(ano, m + 1, 0).getDate();
-  const linhas = [];
-  for (let i = 1; i <= nDias; i++) {
-    const k = chave(new Date(ano, m, i));
-    if (k < INICIO || k > hoje()) continue;
-    const r = lerDia(k);
-    const ok = HABITOS.filter((h) => ativo(h, k) && feito(h, k)).map((h) => h.curto);
-    linhas.push(`${pad(i)}/${pad(m + 1)} (${SEM[deChave(k).getDay()]}): ${r.tweet || '(sem tweet)'}\n   feitos: ${ok.join(', ') || 'nenhum'}${r.pm3 ? ` · PM3 ${fmtH(r.pm3)}` : ''}${r.agua ? ` · água ${r.agua}/4` : ''}`);
-  }
-  const txt = `Johnny's Journal: fechamento de ${MESES[m]} de ${ano}.\nOlhe a constância dos hábitos e os tweets do mês e me ajude no fechamento mensal: o que funcionou, o que falhou, o que muda no mês que vem.\n\n${linhas.join('\n')}`;
-  enviar(txt);
-};
-$('bk-exportar').onclick = () => {
-  const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `johnnys-journal-${hoje()}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-};
-$('bk-importar').onchange = async (e) => {
-  const f = e.target.files[0]; if (!f) return;
-  try {
-    const novo = JSON.parse(await f.text());
-    if (!novo.dias) throw new Error();
-    if (!confirm('Trocar os dados deste celular pela cópia escolhida?')) return;
-    dados = { memorias: [], ...novo }; salvar(); renderTudo(); avisar('Cópia restaurada.');
-  } catch (err) { avisar('Esse arquivo não é uma cópia do Journal.'); }
-  e.target.value = '';
-};
-
+$('ir-mes').onclick = () => { mesRef = deChave(hoje()); mesRef.setDate(1); renderMes(); };
 // ================= PLANO (cifrado) =================
 // plano.enc.json é público, mas cifrado (AES-GCM, chave tirada da senha com PBKDF2).
 // A senha fica só neste celular. O que o JV marca como feito vai em dados.plano.
@@ -749,7 +732,7 @@ async function sincronizar() {
     }
     if (!ok) throw new Error('conflito');
     const h = new Date();
-    statusSync(`Ligado. Último backup às ${pad(h.getHours())}:${pad(h.getMinutes())}.`);
+    statusSync(`Backup feito às ${pad(h.getHours())}:${pad(h.getMinutes())}.`);
     return 'ok';
   } catch (e) {
     statusSync(e.message === 'token' ? 'O GitHub recusou o token. Cole um token novo.' : e.message === 'conflito' ? 'Não consegui gravar o backup. Toque em Sincronizar agora.' : 'Sem internet agora: tento de novo depois.');
@@ -765,7 +748,7 @@ function renderSync() {
   const ligado = !!token();
   $('sync-form').hidden = ligado;
   $('sync-agora').hidden = !ligado;
-  if (!ligado) statusSync('Desligado: os dados ficam só neste celular.');
+  if (!ligado) statusSync('');
 }
 $('sync-ligar').onclick = async () => {
   const tk = $('sync-token').value.trim();

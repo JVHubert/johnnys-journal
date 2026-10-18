@@ -23,6 +23,7 @@
         <div class="dia-titulo">
           <b id="dia-label"></b>
           <span id="dia-sub"></span>
+          <button class="link ir-hoje" id="ir-hoje" hidden>Voltar para hoje</button>
         </div>
         <button class="icone" id="dia-prox" aria-label="Próximo dia">›</button>
       </header>
@@ -34,6 +35,7 @@
       </div>
 
       <div id="lista-habitos"></div>
+      <p class="sutil pequena dica-toque">Cada toque muda: <b class="ok">✓</b> feito, <b class="x">✗</b> não feito, <b class="na">–</b> não se aplica (como o dia de descanso do treino).</p>
 
       <div class="cartao ent-hoje">
         <div class="linha-base"><b>Entrevista do dia</b><small id="ent-hoje-status" class="sutil"></small></div>
@@ -50,7 +52,17 @@
           <div class="sug-botoes"><button class="secundario" id="sug-usar">Usar</button><button class="link" id="sug-ignorar">Manter o meu</button></div>
         </div>
         <textarea id="tweet" maxlength="280" rows="3" placeholder="Toque aqui e use o microfone do teclado para ditar."></textarea>
-        <div class="linha-base"><small class="sutil">vira a linha do dia no bujo</small><small id="tweet-cont">0/280</small></div>
+        <div class="linha-base"><small class="sutil">aparece em Mês, na aba Tweets</small><small id="tweet-cont">0/280</small></div>
+      </div>
+
+      <div class="sync">
+        <p class="sutil pequena"><span id="sync-status"></span> <button class="link" id="sync-agora" hidden>Sincronizar agora</button></p>
+        <div id="sync-form" class="cartao" hidden>
+          <b>Ligue o backup automático</b>
+          <p class="sutil pequena">Sem ele, os dados ficam só neste celular.</p>
+          <input id="sync-token" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="cole aqui o token (github_pat_...)">
+          <button class="principal" id="sync-ligar">Ligar o backup</button>
+        </div>
       </div>
     </section>
 
@@ -103,7 +115,7 @@
     <section id="tela-mes" class="tela" hidden>
       <header class="dia-nav">
         <button class="icone" id="mes-ant" aria-label="Mês anterior">‹</button>
-        <div class="dia-titulo"><b id="mes-label"></b><span id="mes-sub"></span></div>
+        <div class="dia-titulo"><b id="mes-label"></b><span id="mes-sub"></span><button class="link ir-hoje" id="ir-mes" hidden>Voltar para este mês</button></div>
         <button class="icone" id="mes-prox" aria-label="Próximo mês">›</button>
       </header>
 
@@ -134,24 +146,9 @@
           <p id="pan-frase"></p>
         </div>
         <div id="pan-habitos"></div>
-        <p class="sutil pequena legenda"><i class="c ok"></i> feito <i class="c nao"></i> não feito <i class="c fut"></i> ainda não chegou</p>
+        <p class="sutil pequena legenda"><span><i class="c ok"></i>feito</span> <span><i class="c parcial"></i>em parte</span> <span><i class="c x"></i>não feito</span> <span><i class="c na"></i>não se aplica</span> <span><i class="c vazio"></i>sem marcação</span></p>
       </div>
 
-      <div class="backup">
-        <div class="cartao sync">
-          <b>Backup automático</b>
-          <p id="sync-status" class="sutil pequena">Desligado: os dados ficam só neste celular.</p>
-          <div id="sync-form">
-            <input id="sync-token" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="cole aqui o token (github_pat_...)">
-            <button class="principal" id="sync-ligar">Ligar backup automático</button>
-          </div>
-          <button class="link" id="sync-agora" hidden>Sincronizar agora</button>
-        </div>
-        <button class="secundario" id="mes-copiar">Compartilhar o mês</button>
-        <button class="secundario" id="bk-exportar">Salvar cópia de segurança</button>
-        <label class="secundario arquivo">Restaurar cópia<input type="file" id="bk-importar" accept="application/json"></label>
-        <p class="sutil pequena">Tudo fica só neste celular. Salve uma cópia de vez em quando.</p>
-      </div>
     </section>
   </main>
 
