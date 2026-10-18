@@ -214,3 +214,8 @@ textarea, input {
 .sugestao p { margin: 4px 0 6px; }
 .sug-botoes { display: flex; gap: 12px; align-items: center; }
 .sug-botoes .secundario { width: auto; margin: 0; padding: 8px 18px; }
+/* transcrição com Whisper */
+.groq { margin-top: 22px; }
+#ent-gravar[aria-pressed="true"] { background: var(--erro); border-color: var(--erro); color: var(--tx); }
+#ent-gravar[aria-pressed="true"] .ponto { background: var(--tx); animation: pulsa 1s infinite; }
+#ent-gravar:disabled { opacity: .7; }

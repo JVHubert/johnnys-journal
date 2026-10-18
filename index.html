@@ -85,6 +85,16 @@
           <button class="principal" id="ent-memoria-ir">Começar</button>
         </div>
         <div id="ent-guardadas"></div>
+
+        <div class="cartao groq" id="groq-box">
+          <b>Transcrição com Whisper</b>
+          <p class="sutil pequena" id="groq-status"></p>
+          <div id="groq-form">
+            <input id="groq-chave" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="cole a chave do Groq (gsk_...)">
+            <button class="principal" id="groq-salvar">Salvar a chave</button>
+          </div>
+          <button class="link" id="groq-trocar" hidden>Trocar a chave</button>
+        </div>
       </div>
 
       <div id="ent-passo" hidden>
@@ -95,6 +105,7 @@
         <h2 id="ent-tema"></h2>
         <ul id="ent-perguntas" class="perguntas"></ul>
         <textarea id="ent-resposta" rows="7" placeholder="Toque em Falar, ou no microfone do teclado."></textarea>
+        <button class="falar" id="ent-gravar" aria-pressed="false" hidden><span class="ponto"></span><span id="ent-gravar-txt">Gravar</span></button>
         <button class="falar" id="ent-falar" aria-pressed="false"><span class="ponto"></span><span id="ent-falar-txt">Falar</span></button>
         <p id="ent-dica" class="sutil pequena"></p>
         <div class="ent-botoes">

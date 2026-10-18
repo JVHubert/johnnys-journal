@@ -303,10 +303,15 @@ function renderPasso() {
   $('ent-resposta').value = ent.respostas[ent.passo] || '';
   $('ent-voltar').disabled = ent.passo === 0;
   $('ent-prox').textContent = ent.passo === temas.length - 1 ? 'Terminar' : ($('ent-resposta').value.trim() ? 'Próximo' : 'Pular');
-  $('ent-dica').textContent = SR
-    ? 'Toque em Falar e conte. Toque de novo para parar.'
-    : 'Este navegador não transcreve sozinho: toque na caixa e use o microfone do teclado.';
-  $('ent-falar').hidden = !SR;
+  const temGroq = !!chaveGroq() && !!window.MediaRecorder;
+  $('ent-gravar').hidden = !temGroq;
+  $('ent-falar').hidden = temGroq || !SR;
+  ultimoAudio = null;
+  $('ent-gravar-txt').textContent = 'Gravar';
+  $('ent-dica').textContent = temGroq
+    ? 'Toque em Gravar e fale à vontade, com pausas. Toque de novo para parar: o texto aparece em alguns segundos.'
+    : SR ? 'Toque em Falar e conte. Toque de novo para parar.'
+    : 'Para transcrever melhor, cole a chave do Groq no início da Entrevista. Por enquanto, use o microfone do teclado.';
 }
 
 function guardarResposta() {
@@ -400,6 +405,112 @@ $('ent-falar').onclick = () => {
   } catch (e) { gravando = false; avisar('Não consegui ligar o microfone.'); }
 };
 
+// ---------- gravar e transcrever com o Whisper (Groq) ----------
+// O áudio vai do celular direto para o Groq, que devolve o texto já pontuado.
+// A chave fica só neste celular, como o token do backup.
+const GROQ_CHAVE = 'jj-groq-chave';
+const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+// palavras da vida do JV: ajudam o Whisper a acertar nomes e termos
+const GROQ_CONTEXTO = 'Diário do JV, em português do Brasil. Nomes e termos: PM3, Localiza, Labs, Iara, Indaiatuba, Belo Horizonte, BH, Pipa, Fortaleza, México, TikTok, boombap, product owner, backlog.';
+const chaveGroq = () => { try { return localStorage.getItem(GROQ_CHAVE); } catch (e) { return null; } };
+let gravador = null, pedacos = [], ocupado = false, relogio = null, ultimoAudio = null;
+
+function renderGroq() {
+  const k = chaveGroq();
+  $('groq-form').hidden = !!k;
+  $('groq-trocar').hidden = !k;
+  $('groq-status').textContent = k
+    ? 'Ligada. Na entrevista, use o botão Gravar: o texto aparece em alguns segundos, já com pontuação.'
+    : 'Cole a chave do Groq (gratuita) para transcrever bem melhor que o microfone do teclado.';
+}
+$('groq-salvar').onclick = async () => {
+  const k = $('groq-chave').value.trim();
+  if (!k) { avisar('Cole a chave primeiro.'); return; }
+  $('groq-status').textContent = 'Conferindo a chave…';
+  try {
+    const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: `Bearer ${k}` } });
+    if (!r.ok) throw new Error(r.status);
+    localStorage.setItem(GROQ_CHAVE, k);
+    $('groq-chave').value = '';
+    renderGroq(); avisar('Chave salva. Pode gravar.');
+  } catch (e) {
+    renderGroq();
+    avisar(String(e.message) === '401' ? 'O Groq recusou essa chave. Confira se copiou inteira.' : 'Não consegui conferir a chave. Veja a internet e tente de novo.');
+  }
+};
+$('groq-trocar').onclick = () => { try { localStorage.removeItem(GROQ_CHAVE); } catch (e) {} renderGroq(); $('groq-chave').focus(); };
+
+function travarNavegacao(sim) {
+  ocupado = sim;
+  $('ent-prox').disabled = sim; $('ent-voltar').disabled = sim || (ent && ent.passo === 0); $('ent-sair').disabled = sim;
+}
+const tipoAudio = () => ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/ogg', 'audio/webm']
+  .find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+
+async function comecarGravacao() {
+  let fluxo;
+  try { fluxo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { avisar('Permita o microfone para o app (cadeado na barra de endereço do Firefox).'); return; }
+  const tipo = tipoAudio();
+  gravador = new MediaRecorder(fluxo, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : undefined);
+  pedacos = [];
+  gravador.ondataavailable = (e) => { if (e.data.size) pedacos.push(e.data); };
+  gravador.onstop = () => {
+    fluxo.getTracks().forEach((t) => t.stop());
+    clearInterval(relogio);
+    ultimoAudio = new Blob(pedacos, { type: gravador.mimeType || tipo || 'audio/webm' });
+    transcrever(ultimoAudio);
+  };
+  gravador.start();
+  travarNavegacao(true);
+  const inicio = Date.now();
+  $('ent-gravar').setAttribute('aria-pressed', 'true');
+  const mostra = () => { const s = Math.floor((Date.now() - inicio) / 1000); $('ent-gravar-txt').textContent = `Gravando ${Math.floor(s / 60)}:${pad(s % 60)} · toque para parar`; };
+  mostra(); relogio = setInterval(mostra, 1000);
+}
+
+async function transcrever(audio) {
+  $('ent-gravar').setAttribute('aria-pressed', 'false');
+  $('ent-gravar').disabled = true;
+  $('ent-gravar-txt').textContent = 'Transcrevendo…';
+  try {
+    const ext = /ogg/.test(audio.type) ? 'ogg' : 'webm';
+    const form = new FormData();
+    form.append('file', audio, `entrevista.${ext}`);
+    form.append('model', 'whisper-large-v3-turbo');
+    form.append('language', 'pt');
+    form.append('response_format', 'json');
+    form.append('temperature', '0');
+    form.append('prompt', GROQ_CONTEXTO);
+    const r = await fetch(GROQ_URL, { method: 'POST', headers: { Authorization: `Bearer ${chaveGroq()}` }, body: form });
+    if (r.status === 401) throw new Error('chave');
+    if (r.status === 429) throw new Error('limite');
+    if (!r.ok) throw new Error('falha');
+    const texto = ((await r.json()).text || '').trim();
+    if (!ent) return;   // saiu da entrevista enquanto transcrevia
+    if (!texto) { avisar('Não ouvi nada nessa gravação. Tente de novo, mais perto do celular.'); return; }
+    const area = $('ent-resposta');
+    area.value = (area.value.trim() ? area.value.trim() + ' ' : '') + texto;
+    ultimoAudio = null;
+    ent.respostas[ent.passo] = area.value; persistirEnt();
+    $('ent-prox').textContent = ent.passo === ENTREVISTAS[ent.modo].length - 1 ? 'Terminar' : 'Próximo';
+  } catch (e) {
+    avisar(e.message === 'chave' ? 'O Groq recusou a chave. Troque-a no início da Entrevista.'
+      : e.message === 'limite' ? 'Passou do limite gratuito por agora. Tente de novo em alguns minutos.'
+      : 'A transcrição falhou (internet?). Toque em Gravar para tentar de novo com o mesmo áudio.');
+  } finally {
+    $('ent-gravar').disabled = false;
+    $('ent-gravar-txt').textContent = ultimoAudio ? 'Tentar transcrever de novo' : 'Gravar';
+    travarNavegacao(false);
+  }
+}
+
+$('ent-gravar').onclick = () => {
+  if (gravador && gravador.state === 'recording') { gravador.stop(); return; }
+  if (ultimoAudio) { transcrever(ultimoAudio); return; }   // a última tentativa falhou: reaproveita o áudio
+  comecarGravacao();
+};
+
 $('ent-resposta').addEventListener('input', () => {
   if (ent.passo < ENTREVISTAS[ent.modo].length - 1) $('ent-prox').textContent = $('ent-resposta').value.trim() ? 'Próximo' : 'Pular';
 });
@@ -423,7 +534,7 @@ $('ent-compartilhar').onclick = () => { if (memoriaFeita) enviar(textoParaClaude
 $('ent-nova').onclick = voltarInicioEnt;
 function voltarInicioEnt() {
   ent = null; $('ent-memoria-nome').hidden = true; $('memoria-titulo').value = '';
-  mostrarEnt('ent-inicio'); renderGuardadas();
+  mostrarEnt('ent-inicio'); renderGuardadas(); renderGroq();
 }
 
 // rascunho do tweet a partir das respostas (o JV revisa na tela Hoje)
@@ -808,6 +919,7 @@ window.addEventListener('pageshow', (e) => { if (e.persisted) voltarDoSegundoPla
 
 renderTudo();
 renderSync();
+renderGroq();
 sincronizar();
 const inicial = new URLSearchParams(location.search).get('tela');
 if (inicial) irPara(inicial);
