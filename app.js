@@ -102,8 +102,10 @@ const metaPm3 = (k) => (fds(k) ? 3 : 2.5);
 function estado(h, k) {
   const d = lerDia(k), v = d.h[h.id];
   if (v === 'na') return 'na';
-  if (h.tipo === 'agua') { const n = d.agua || 0; return n >= 3 ? 'ok' : n > 0 ? 'parcial' : '';   } // 3 garrafas batem a meta; a 4ª é bônus
-  if (h.tipo === 'horas') { const n = d.pm3 || 0; return n >= metaPm3(k) ? 'ok' : n > 0 ? 'parcial' : ''; }
+  // água e PM3 não têm o ✗: num dia que já passou, zero conta como não feito (hoje ainda está em aberto)
+  const zero = k < hoje() ? 'x' : '';
+  if (h.tipo === 'agua') { const n = d.agua || 0; return n >= 3 ? 'ok' : n > 0 ? 'parcial' : zero; }   // 3 garrafas batem a meta; a 4ª é bônus
+  if (h.tipo === 'horas') { const n = d.pm3 || 0; return n >= metaPm3(k) ? 'ok' : n > 0 ? 'parcial' : zero; }
   return v === true ? 'ok' : v === 'x' ? 'x' : '';
 }
 const feito = (h, k) => estado(h, k) === 'ok';
