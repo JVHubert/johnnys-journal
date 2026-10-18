@@ -9,7 +9,7 @@
   --ac: #5cc08a;
   --parcial: #2f6b4b;     /* verde mais apagado: meta feita em parte */
   --erro: #e5534b;        /* vermelho: não feito */
-  --na: #4a515c;          /* cinza: não se aplica */
+  --na: #e7e5e0;          /* branco: não se aplica (salta aos olhos, para achar marcação errada) */
   --vazio: #20252c;       /* sem marcação */          /* verde: a cor do progresso no diário */
 }
 * { box-sizing: border-box; }
@@ -109,20 +109,19 @@ textarea, input {
 .seg button { background: none; border: 0; border-radius: 9px; padding: 11px 6px; color: var(--tx2); font-weight: 600; }
 .seg button[aria-pressed="true"] { background: var(--s2); color: var(--tx); box-shadow: inset 0 0 0 1px var(--linha); }
 
+/* tweets: uma linha por dia, letra do tamanho do panorama, para ver o mês de uma vez */
 .tweets { list-style: none; margin: 0; padding: 0; }
 .tweets li { border-top: 1px solid var(--linha); }
 .tweets button {
-  display: grid; grid-template-columns: 52px 1fr; gap: 12px; width: 100%; text-align: left;
-  background: none; border: 0; padding: 14px 2px;
+  display: grid; grid-template-columns: 54px 1fr auto; gap: 10px; align-items: center; width: 100%; text-align: left;
+  background: none; border: 0; padding: 6px 2px; font-size: 14px; line-height: 1.3;
 }
-.tweets .data { text-align: center; line-height: 1.1; }
-.tweets .data b { display: block; font-size: 22px; }
-.tweets .data span { font-size: 13px; color: var(--tx2); }
-.tweets .txt { align-self: center; }
-.tweets .vazio { color: var(--tx2); font-style: italic; font-size: 15px; }
-.tweets .meta { display: block; margin-top: 4px; font-size: 13px; color: var(--tx2); }
+.tweets .data { color: var(--tx2); white-space: nowrap; }
+.tweets .data b { color: var(--tx); font-size: 14px; }
+.tweets .txt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tweets .vazio { color: var(--tx2); font-style: italic; }
+.tweets .meta { font-size: 12px; color: var(--tx2); font-variant-numeric: tabular-nums; }
 .tweets .hoje .data b { color: var(--ac); }
-
 .resumo b { display: block; font-size: 44px; line-height: 1; color: var(--ac); }
 .resumo p { margin: 10px 0 0; }
 /* panorama: nome · faixa de dias · % na mesma linha */
@@ -150,7 +149,7 @@ textarea, input {
 /* hábitos de tocar: três estados */
 .habito[data-estado="ok"] .chk { background: var(--ac); border-color: var(--ac); color: var(--bg); }
 .habito[data-estado="x"] .chk { border-color: var(--erro); color: var(--erro); }
-.habito[data-estado="na"] .chk { border-color: var(--na); background: var(--na); color: var(--tx); }
+.habito[data-estado="na"] .chk { border-color: var(--na); background: var(--na); color: var(--bg); }
 .habito[data-estado="na"] .txt { color: var(--tx2); }
 .chk { font-size: 19px; font-weight: 700; line-height: 1; }
 .dica-toque { margin: 10px 0 0; }
@@ -219,3 +218,9 @@ textarea, input {
 #ent-gravar[aria-pressed="true"] { background: var(--erro); border-color: var(--erro); color: var(--tx); }
 #ent-gravar[aria-pressed="true"] .ponto { background: var(--tx); animation: pulsa 1s infinite; }
 #ent-gravar:disabled { opacity: .7; }
+/* panorama ampliado e cartão do Whisper recolhido */
+.pan-zoom { display: block; margin: 0 0 10px auto; font-size: 14px; color: var(--ac); }
+.groq.recolhido { background: none; padding: 0; }
+.groq.recolhido > b { display: none; }
+.groq.recolhido p { display: inline; }
+.groq.recolhido .link { display: inline; padding: 0 0 0 6px; font-size: 14px; }

@@ -417,10 +417,11 @@ let gravador = null, pedacos = [], ocupado = false, relogio = null, ultimoAudio 
 
 function renderGroq() {
   const k = chaveGroq();
+  $('groq-box').classList.toggle('recolhido', !!k);
   $('groq-form').hidden = !!k;
   $('groq-trocar').hidden = !k;
   $('groq-status').textContent = k
-    ? 'Ligada. Na entrevista, use o botão Gravar: o texto aparece em alguns segundos, já com pontuação.'
+    ? 'Transcrição com Whisper ligada.'
     : 'Cole a chave do Groq (gratuita) para transcrever bem melhor que o microfone do teclado.';
 }
 $('groq-salvar').onclick = async () => {
@@ -537,23 +538,68 @@ function voltarInicioEnt() {
   mostrarEnt('ent-inicio'); renderGuardadas(); renderGroq();
 }
 
-// rascunho do tweet a partir das respostas (o JV revisa na tela Hoje)
+// ---------- tweet do dia: curto, só o essencial do que o JV quer lembrar ----------
+// Exemplos do próprio JV: "a risada do Leandro e a rodada surpresa", "quero lembrar da saladinha do possan's".
+const textoBase = (e) => (e.respostas[5] || e.respostas[0] || e.respostas.find(Boolean) || '').replace(/\s+/g, ' ').trim();
+
+// sem internet: corta sozinho (tira o "quero lembrar", fica com a primeira frase, até ~80 letras)
 function rascunhoTweet(e) {
-  // "Para lembrar" diz o essencial do dia; sem ele, "O que aconteceu"
-  let t = (e.respostas[5] || e.respostas[0] || e.respostas.find(Boolean) || '').replace(/\s+/g, ' ').trim();
+  let t = textoBase(e);
   if (!t) return '';
-  t = t[0].toUpperCase() + t.slice(1);
-  if (t.length > 280) { t = t.slice(0, 279); t = t.slice(0, t.lastIndexOf(' ')) + '…'; }
-  else if (!/[.!?…]$/.test(t)) t += '.';
-  return t;
+  t = t.replace(/^(daqui a \S+ anos,?\s*)?(eu\s+)?(quero|queria|vou)\s+lembrar\s+(de hoje como\s+)?/i, '');
+  t = t.replace(/^das\s/i, 'as ').replace(/^dos\s/i, 'os ').replace(/^da\s/i, 'a ').replace(/^do\s/i, 'o ').replace(/^de\s/i, '');
+  t = t.split(/[.!?;]\s/)[0].replace(/[.!?;,]+$/, '');
+  t = t.split(/\s(?:quando|porque|enquanto|que a gente)\s/i)[0];   // fica com o essencial, sem a explicação
+  if (t.length > 80) { t = t.slice(0, 80); t = t.slice(0, t.lastIndexOf(' ')) + '…'; }
+  return t.charAt(0).toLowerCase() + t.slice(1);
 }
 
+// com a chave do Groq: um modelo de texto resume no estilo do JV
+const MODELOS_TEXTO = ['llama-3.3-70b-versatile', 'meta-llama/llama-4-maverick-17b-128e-instruct', 'meta-llama/llama-4-scout-17b-16e-instruct', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.1-8b-instant'];
+async function modeloTexto(k) {
+  try {
+    const cache = JSON.parse(localStorage.getItem('jj-groq-modelo') || 'null');
+    if (cache && Date.now() - cache.t < 864e5) return cache.id;
+  } catch (e) { /* busca de novo */ }
+  const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: `Bearer ${k}` } });
+  if (!r.ok) return null;
+  const ids = ((await r.json()).data || []).map((m) => m.id);
+  const id = MODELOS_TEXTO.find((m) => ids.includes(m)) || null;
+  try { localStorage.setItem('jj-groq-modelo', JSON.stringify({ id, t: Date.now() })); } catch (e) { /* segue */ }
+  return id;
+}
+async function tweetComGroq(e) {
+  const k = chaveGroq(), base = textoBase(e);
+  if (!k || !base) return null;
+  const modelo = await modeloTexto(k);
+  if (!modelo) return null;
+  const corpo = {
+    model: modelo, temperature: 0.3, max_tokens: modelo.includes('gpt-oss') ? 400 : 60,
+    messages: [
+      { role: 'system', content: 'Você escreve o "tweet do dia" do diário do JV a partir do que ele quer lembrar do dia. Regras: uma frase curta, de 3 a 12 palavras, no máximo 90 caracteres; só o essencial, juntando no máximo duas coisas com "e"; minúsculas (nomes próprios com maiúscula), sem ponto final, sem emoji, sem hashtag, sem aspas; não comece com "hoje"; não invente nada. Responda só com a frase.' },
+      { role: 'user', content: 'Quero lembrar da risada do Leandro quando a gente tava fazendo as mímicas. E quando a gente começou a rodada de sons, a quarta rodada, a rodada surpresa' },
+      { role: 'assistant', content: 'a risada do Leandro e a rodada surpresa' },
+      { role: 'user', content: "quero lembrar da saladinha do possan's" },
+      { role: 'assistant', content: "a saladinha do possan's" },
+      { role: 'user', content: base },
+    ],
+  };
+  if (modelo.includes('gpt-oss')) corpo.reasoning_effort = 'low';
+  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST', headers: { Authorization: `Bearer ${k}`, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+  });
+  if (!r.ok) return null;
+  let t = (((await r.json()).choices || [])[0] || {}).message?.content || '';
+  t = t.split('\n').map((s) => s.trim()).filter(Boolean).pop() || '';
+  t = t.replace(/^["'“”]+|["'“”]+$/g, '').replace(/\.+$/, '').trim();
+  return t && t.length <= 140 ? t : null;
+}
 // sincroniza na hora e conta o resultado
 async function sincronizarAgora(msgOk) {
   clearTimeout(syncTimer);
   const r = await sincronizar();
   if (r === 'ok') avisar(msgOk + ' Backup feito.');
-  else if (r === 'desligado') avisar(msgOk + ' Ligue o backup automático em Mês.');
+  else if (r === 'desligado') avisar(msgOk + ' Ligue o backup automático no fim da tela Hoje.');
   else if (r === 'na-fila') avisar(msgOk);
   else avisar(msgOk + ' O backup vai assim que tiver internet.');
 }
@@ -575,7 +621,16 @@ function concluirDia() {
     const card = document.querySelector('.tweet');
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, 80);
+  const feita = { respostas: ent ? ent.respostas : (r.entrevista || {}).respostas || [] };
   sincronizarAgora('Entrevista guardada. Revise o tweet.');
+  // troca o rascunho por um tweet do Groq, se o JV ainda não mexeu nele
+  tweetComGroq(r.entrevista || feita).then((tw) => {
+    const d = lerDia(data);
+    if (!tw || !d.tweetRascunho) return;
+    const x = dia(data); x.tweet = tw;
+    salvar();
+    if (atual === data) renderHoje();
+  }).catch(() => { /* fica o rascunho */ });
 }
 
 // fim de uma memória: guarda e sincroniza; o Claude lê do backup
@@ -610,7 +665,9 @@ function diasDoMes() {
 }
 const pctHabito = (h, ks) => {
   const vale = ks.filter((k) => conta(h, k));
-  return vale.length ? Math.round((vale.filter((k) => feito(h, k)).length / vale.length) * 100) : null;
+  // feito vale 1 ponto, em parte vale meio
+  const pontos = vale.reduce((s, k) => s + ({ ok: 1, parcial: 0.5 }[estado(h, k)] || 0), 0);
+  return vale.length ? Math.round((pontos / vale.length) * 100) : null;
 };
 
 function renderMes() {
@@ -640,10 +697,12 @@ function renderTweets(ks) {
     const d = deChave(k), r = lerDia(k);
     const ativos = HABITOS.filter((h) => ativo(h, k) && estado(h, k) !== 'na');
     const n = ativos.filter((h) => feito(h, k)).length;
-    const txt = r.tweet ? `<span>${esc(r.tweet)}</span>` : '<span class="vazio">sem tweet: toque para escrever</span>';
-    return `<li class="${k === hoje() ? 'hoje' : ''}"><button data-dia="${k}">
-      <span class="data"><b>${d.getDate()}</b><span>${SEM[d.getDay()].slice(0, 3)}</span></span>
-      <span class="txt">${txt}<span class="meta">${n} de ${ativos.length} hábitos${r.pm3 ? ` · PM3 ${fmtH(r.pm3)}` : ''}</span></span>
+    const txt = r.tweet ? esc(r.tweet) : '<span class="vazio">sem tweet</span>';
+    // uma linha por dia, para ver o mês inteiro de uma vez; tocar abre o dia
+    return `<li class="${k === hoje() ? 'hoje' : ''}"><button data-dia="${k}" title="${r.tweet ? esc(r.tweet) : ''}">
+      <span class="data"><b>${d.getDate()}</b> ${SEM[d.getDay()].slice(0, 3)}</span>
+      <span class="txt">${txt}</span>
+      <span class="meta">${n}/${ativos.length}</span>
     </button></li>`;
   }).join('');
   lista.querySelectorAll('button[data-dia]').forEach((b) => (b.onclick = () => {
@@ -652,7 +711,14 @@ function renderTweets(ks) {
 }
 
 // panorama: uma linha por hábito (nome, um quadradinho por dia, % à direita)
-function renderPanorama(ks) {
+let zoomPan = false;
+try { zoomPan = localStorage.getItem('jj-pan-zoom') === '1'; } catch (e) { /* padrão */ }
+function renderPanorama(ksMes) {
+  // ampliado: só os dias que já passaram (e desde o início do tracker), com quadrados maiores
+  const passados = ksMes.filter((k) => k >= INICIO && k <= hoje());
+  const ks = zoomPan && passados.length ? passados : ksMes;
+  $('pan-zoom').textContent = zoomPan ? 'Ver o mês inteiro' : 'Ampliar os dias que já passaram';
+  $('pan-resumo').hidden = zoomPan;
   const n = ks.length, cols = `repeat(${n}, 1fr)`;
   const hs = HABITOS.filter((h) => ks.some((k) => ativo(h, k)));
   const linhas = hs.map((h) => {
@@ -666,7 +732,8 @@ function renderPanorama(ks) {
     }).join('');
     return { h, p, html: `<div class="pan-h"><span class="pan-nome">${h.curto}</span><div class="faixa" style="grid-template-columns:${cols}">${celulas}</div><b class="pan-pct${p !== null && p < 50 ? ' fraco' : ''}">${p === null ? '–' : p + '%'}</b></div>` };
   });
-  const regua = ks.map((k) => { const d = deChave(k).getDate(); return `<span>${d === 1 || d % 5 === 0 ? d : ''}</span>`; }).join('');
+  const todoDia = n <= 16;
+  const regua = ks.map((k, i) => { const d = deChave(k).getDate(); return `<span>${todoDia || i === 0 || d % 5 === 0 ? d : ''}</span>`; }).join('');
   $('pan-habitos').innerHTML = linhas.map((l) => l.html).join('') +
     `<div class="pan-h pan-regua"><span></span><div class="reguas" style="grid-template-columns:${cols}">${regua}</div><span></span></div>`;
 
@@ -679,6 +746,7 @@ function renderPanorama(ks) {
     ? `Mais firme: ${ord[0].h.nome} (${ord[0].p}%). O que mais escapou: ${ord[ord.length - 1].h.nome} (${ord[ord.length - 1].p}%).`
     : '';
 }
+$('pan-zoom').onclick = () => { zoomPan = !zoomPan; try { localStorage.setItem('jj-pan-zoom', zoomPan ? '1' : '0'); } catch (e) {} renderMes(); };
 $('vis-plano').onclick = () => { visao = 'plano'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };
 $('vis-tweets').onclick = () => { visao = 'tweets'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };
 $('vis-panorama').onclick = () => { visao = 'panorama'; try { localStorage.setItem('jj-visao-mes', visao); } catch (e) {} renderMes(); };const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
