@@ -86,7 +86,9 @@ const dia = (k) => { const r = (dados.dias[k] = dados.dias[k] || { h: {} }); r.t
 const lerDia = (k) => dados.dias[k] || { h: {} };
 
 // ---------- datas ----------
-const $ = (id) => document.getElementById(id);
+// Elemento que não existe nesta versão da tela vira um fantasma solto (o código antigo segue funcionando).
+const FANTASMAS = {};
+const $ = (id) => document.getElementById(id) || (FANTASMAS[id] = FANTASMAS[id] || document.createElement('div'));
 const pad = (n) => String(n).padStart(2, '0');
 const chave = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const deChave = (k) => { const [a, m, d] = k.split('-').map(Number); return new Date(a, m - 1, d); };
@@ -599,7 +601,7 @@ async function sincronizarAgora(msgOk) {
   clearTimeout(syncTimer);
   const r = await sincronizar();
   if (r === 'ok') avisar(msgOk + ' Backup feito.');
-  else if (r === 'desligado') avisar(msgOk + ' Ligue o backup automático no fim da tela Hoje.');
+  else if (r === 'desligado') avisar(msgOk + ' Ligue o backup automático em Ajustes.');
   else if (r === 'na-fila') avisar(msgOk);
   else avisar(msgOk + ' O backup vai assim que tiver internet.');
 }
@@ -649,14 +651,15 @@ function renderCartaoEntrevista(reg) {
   const n = e ? e.respostas.filter(Boolean).length : 0;
   $('ent-hoje-status').textContent = n ? `feita · ${n} de ${ENTREVISTAS.dia.length} temas` : 'ainda não';
   $('ent-hoje-btn').textContent = n ? 'Rever ou completar a entrevista' : 'Fazer a entrevista do dia';
-  $('ent-hoje-btn').className = n ? 'secundario' : 'principal';
+  $('ent-hoje-btn').className = n ? 'botao contorno grande' : 'botao violeta grande';
+  if (window.aoMudarEntrevista) window.aoMudarEntrevista();
 }
 $('ent-hoje-btn').onclick = () => { irPara('entrevista'); iniciarEnt('dia'); };
 
 // ================= MÊS =================
 let mesRef = deChave(atual); mesRef.setDate(1);
-let visao = 'plano';
-try { visao = localStorage.getItem('jj-visao-mes') || 'plano'; } catch (e) { /* padrão */ }
+// Nesta versão, o Mês mostra só o Panorama (o plano virou tarefas, os tweets estão no Journal).
+let visao = 'panorama';
 
 function diasDoMes() {
   const ano = mesRef.getFullYear(), m = mesRef.getMonth();
@@ -719,7 +722,7 @@ function renderPanorama(ksMes) {
   const ks = zoomPan && passados.length ? passados : ksMes;
   $('pan-zoom').textContent = zoomPan ? 'Ver o mês inteiro' : 'Ampliar os dias que já passaram';
   $('pan-resumo').hidden = zoomPan;
-  const n = ks.length, cols = `repeat(${n}, 1fr)`;
+  const n = ks.length, cols = `repeat(${n}, minmax(0, 1fr))`;
   const hs = HABITOS.filter((h) => ks.some((k) => ativo(h, k)));
   const linhas = hs.map((h) => {
     const p = pctHabito(h, ks);
@@ -882,6 +885,13 @@ function juntar(local, remoto) {
   r.sugestoes = { ...(remoto.sugestoes || {}) };
   for (const [k, s] of Object.entries(local.sugestoes || {})) if (!r.sugestoes[k] || (s.t || 0) >= (r.sugestoes[k].t || 0)) r.sugestoes[k] = s;
   // caixa: tarefas escritas no celular para o Journal do PC (junta as duas pontas pelo id)
+  // notas escritas no celular (Journal): juntam pelo id, vale a mais nova
+  const notas = new Map();
+  for (const n of [...(remoto.notas || []), ...(local.notas || [])]) if (n && n.id && (!notas.has(n.id) || (n.t || 0) >= (notas.get(n.id).t || 0))) notas.set(n.id, n);
+  if (notas.size) r.notas = [...notas.values()]; else delete r.notas;
+  // contadores pessoais da Início: a lista inteira, vale a mais nova
+  const ct = (local.contadoresT || 0) >= (remoto.contadoresT || 0) ? local : remoto;
+  if (ct.contadores) { r.contadores = ct.contadores; r.contadoresT = ct.contadoresT || 0; }
   const caixa = new Map();
   for (const c of [...(remoto.caixa || []), ...(local.caixa || [])]) if (c && c.id && (!caixa.has(c.id) || (c.t || 0) >= (caixa.get(c.id).t || 0))) caixa.set(c.id, c);
   if (caixa.size) r.caixa = [...caixa.values()]; else delete r.caixa;
@@ -933,6 +943,7 @@ async function sincronizar() {
     if (!ok) throw new Error('conflito');
     const h = new Date();
     statusSync(`Backup feito às ${pad(h.getHours())}:${pad(h.getMinutes())}.`);
+    if (window.aoSincronizar) window.aoSincronizar();
     return 'ok';
   } catch (e) {
     statusSync(e.message === 'token' ? 'O GitHub recusou o token. Cole um token novo.' : e.message === 'conflito' ? 'Não consegui gravar o backup. Toque em Sincronizar agora.' : 'Sem internet agora: tento de novo depois.');
@@ -961,20 +972,26 @@ $('sync-agora').onclick = () => { statusSync('Sincronizando…'); sincronizar();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); });
 
 // ================= abas =================
-let telaAtual = 'hoje';
+// Telas: inicio, tarefas, habitos, journal (barra de baixo) e entrevista, ajustes (abrem por cima).
+let telaAtual = 'inicio', telaDaBarra = 'inicio';
 function irPara(tela) {
+  if (tela === 'hoje' || tela === 'mes') tela = 'habitos';
   telaAtual = tela;
   pararGravacao();
   document.querySelectorAll('.tela').forEach((s) => (s.hidden = s.id !== 'tela-' + tela));
-  document.querySelectorAll('.abas button').forEach((b) => b.toggleAttribute('aria-current', b.dataset.tela === tela));
-  document.querySelectorAll('.abas button[aria-current]').forEach((b) => b.setAttribute('aria-current', 'page'));
-  if (tela === 'hoje') renderHoje();
+  const naBarra = ['inicio', 'tarefas', 'habitos', 'journal'].includes(tela);
+  if (naBarra) telaDaBarra = tela;
+  document.querySelectorAll('.barra button').forEach((b) => {
+    if (b.dataset.tela === telaDaBarra) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  document.body.dataset.tela = tela;
+  if (tela === 'habitos') { renderHoje(); renderMes(); }
   if (tela === 'entrevista' && !ent) voltarInicioEnt();
-  if (tela === 'mes') { mesRef = deChave(atual); mesRef.setDate(1); renderMes(); }
+  if (window.aoMostrarTela) window.aoMostrarTela(tela);
   window.scrollTo(0, 0);
 }
-document.querySelectorAll('.abas button').forEach((b) => (b.onclick = () => irPara(b.dataset.tela)));
-function renderTudo() { renderHoje(); renderMes(); renderGuardadas(); }
+document.querySelectorAll('.barra button').forEach((b) => (b.onclick = () => irPara(b.dataset.tela)));
+function renderTudo() { renderHoje(); renderMes(); renderGuardadas(); if (window.renderNovo) window.renderNovo(); }
 
 // volta para "hoje" quando o app é reaberto num dia novo
 document.addEventListener('visibilitychange', () => {
@@ -988,8 +1005,8 @@ let ultimoHoje = hoje();
 let escondidoEm = 0;
 function voltarDoSegundoPlano() {
   try {
-    if (telaAtual === 'hoje') renderHoje();
-    if (telaAtual === 'mes') renderMes();
+    if (telaAtual === 'habitos') { renderHoje(); renderMes(); }
+    if (window.renderNovo) window.renderNovo();
     if (telaAtual === 'entrevista' && !ent) renderGuardadas();
     document.body.style.display = 'none'; void document.body.offsetHeight; document.body.style.display = '';   // força repintar
   } catch (e) { mostrarFalha(e.message); return; }

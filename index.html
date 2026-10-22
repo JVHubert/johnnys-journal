@@ -2,75 +2,164 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f1216">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#0D0806">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Journal">
   <title>Johnny's Journal</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main id="app">
 
-    <!-- ================= HOJE ================= -->
-    <section id="tela-hoje" class="tela">
-      <header class="dia-nav">
-        <button class="icone" id="dia-ant" aria-label="Dia anterior">‹</button>
-        <div class="dia-titulo">
-          <b id="dia-label"></b>
-          <span id="dia-sub"></span>
-          <button class="link ir-hoje" id="ir-hoje" hidden>Voltar para hoje</button>
+    <!-- ================= INÍCIO ================= -->
+    <section id="tela-inicio" class="tela">
+      <header class="capa">
+        <div class="capa-topo">
+          <div>
+            <small id="ini-data" class="capa-data"></small>
+            <h1 id="ini-frase">2026 é autenticidade.</h1>
+          </div>
+          <button class="icone-redondo" id="ini-ajustes" aria-label="Ajustes"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
         </div>
-        <button class="icone" id="dia-prox" aria-label="Próximo dia">›</button>
+        <div class="ano" id="ini-ano"></div>
       </header>
 
-      <div id="pm3-card" class="cartao pm3">
-        <div class="linha-base"><span>PM3 até 01/11</span><b id="pm3-pct"></b></div>
-        <div class="barra"><i id="pm3-barra"></i></div>
-        <small id="pm3-txt"></small>
+      <div id="ini-contadores-box">
+        <div class="carrossel" id="ini-contadores"></div>
+        <div class="pontos" id="ini-pontos"></div>
       </div>
 
-      <div id="lista-habitos"></div>
-      <p class="sutil pequena dica-toque">Cada toque muda: <b class="ok">✓</b> feito, <b class="x">✗</b> não feito, <b class="na">–</b> não se aplica (como o dia de descanso do treino).</p>
+      <section class="card" id="ini-hoje-box">
+        <div class="card-topo"><h2 class="secao">Hoje</h2><button class="link" id="ini-ver-tudo">Ver tudo ›</button></div>
+        <div id="ini-hoje"></div>
+      </section>
 
-      <div class="cartao ent-hoje">
-        <div class="linha-base"><b>Entrevista do dia</b><small id="ent-hoje-status" class="sutil"></small></div>
-        <button class="principal" id="ent-hoje-btn">Fazer a entrevista do dia</button>
+      <section id="ini-habitos-box">
+        <h2 class="secao">Hábitos que faltam</h2>
+        <div class="faixa-rola" id="ini-habitos"></div>
+      </section>
+
+      <section id="ini-neste-box" hidden>
+        <h2 class="secao">Neste dia</h2>
+        <div class="faixa-rola" id="ini-neste"></div>
+      </section>
+
+      <button class="botao violeta grande" id="ini-entrevista">Fazer a entrevista de hoje</button>
+    </section>
+
+    <!-- ================= TAREFAS ================= -->
+    <section id="tela-tarefas" class="tela" hidden>
+      <header class="topo">
+        <h1>Tarefas</h1>
+        <button class="sinc" id="tar-sinc"><i class="bolinha"></i><span id="tar-sinc-txt">ligando…</span> ↻</button>
+      </header>
+      <div class="abas-topo" role="tablist" id="tar-abas">
+        <button data-v="hoje" role="tab">Hoje</button>
+        <button data-v="proximos" role="tab">Próximos</button>
+        <button data-v="inbox" role="tab">Inbox</button>
+        <button data-v="projetos" role="tab">Projetos</button>
+      </div>
+      <div id="tar-lista"></div>
+      <div id="tar-sem-ligacao" class="card" hidden>
+        <b>Falta ligar ao Journal do PC</b>
+        <p class="meta">Ligue o backup em Ajustes (engrenagem da Início): a ligação vem junto, sozinha.</p>
+      </div>
+      <button class="fab violeta fab-cima" id="tar-ditar" aria-label="Ditar tarefa"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      <button class="fab menta" id="tar-nova" aria-label="Nova tarefa">+</button>
+    </section>
+
+    <!-- ================= HÁBITOS ================= -->
+    <section id="tela-habitos" class="tela" hidden>
+      <div class="chave-dupla" role="group" aria-label="Ver">
+        <button id="hab-hoje" aria-pressed="true">Hoje</button>
+        <button id="hab-mes" aria-pressed="false">Mês</button>
       </div>
 
-      <div class="cartao tweet">
-        <label for="tweet"><b>O dia em um tweet</b></label>
-        <p id="tweet-nota" class="nota" hidden>Rascunho feito com a sua entrevista. Revise e ajuste do seu jeito.</p>
-        <p id="tweet-claude" class="sutil pequena" hidden>Escrito pelo Claude a partir da sua entrevista. Pode editar à vontade.</p>
-        <div id="sug-box" class="sugestao" hidden>
-          <small class="sutil">O Claude sugeriu outro tweet:</small>
-          <p id="sug-texto"></p>
-          <div class="sug-botoes"><button class="secundario" id="sug-usar">Usar</button><button class="link" id="sug-ignorar">Manter o meu</button></div>
+      <div id="hab-painel-hoje">
+        <header class="dia-nav">
+          <button class="icone" id="dia-ant" aria-label="Dia anterior">‹</button>
+          <div class="dia-titulo">
+            <b id="dia-label"></b>
+            <span id="dia-sub"></span>
+            <button class="link ir-hoje" id="ir-hoje" hidden>Voltar para hoje</button>
+          </div>
+          <button class="icone" id="dia-prox" aria-label="Próximo dia">›</button>
+        </header>
+
+        <div id="pm3-card" class="card pm3">
+          <div class="linha-base"><span>PM3 até 01/11</span><b id="pm3-pct"></b></div>
+          <div class="barra"><i id="pm3-barra"></i></div>
+          <small id="pm3-txt" class="meta"></small>
         </div>
-        <textarea id="tweet" maxlength="280" rows="3" placeholder="Toque aqui e use o microfone do teclado para ditar."></textarea>
-        <div class="linha-base"><small class="sutil">aparece em Mês, na aba Tweets</small><small id="tweet-cont">0/280</small></div>
+
+        <div id="lista-habitos"></div>
+
+        <div class="card tweet">
+          <label for="tweet"><b>O dia em um tweet</b></label>
+          <p id="tweet-nota" class="meta" hidden>Rascunho feito com a sua entrevista. Revise do seu jeito.</p>
+          <p id="tweet-claude" class="meta" hidden>Escrito pelo Claude a partir da sua entrevista. Pode editar.</p>
+          <div id="sug-box" class="sugestao" hidden>
+            <small class="meta">O Claude sugeriu outro tweet:</small>
+            <p id="sug-texto"></p>
+            <div class="sug-botoes"><button class="botao contorno" id="sug-usar">Usar</button><button class="link" id="sug-ignorar">Manter o meu</button></div>
+          </div>
+          <textarea id="tweet" maxlength="280" rows="2" placeholder="Toque e escreva (ou dite pelo teclado)."></textarea>
+          <div class="linha-base"><small class="meta">aparece no Journal</small><small id="tweet-cont" class="meta">0/280</small></div>
+        </div>
+
+        <div class="ent-hoje">
+          <small id="ent-hoje-status" class="meta"></small>
+          <button class="botao violeta grande" id="ent-hoje-btn">Fazer a entrevista</button>
+        </div>
       </div>
 
-      <div class="sync">
-        <p class="sutil pequena"><span id="sync-status"></span> <button class="link" id="sync-agora" hidden>Sincronizar agora</button></p>
-        <div id="sync-form" class="cartao" hidden>
-          <b>Ligue o backup automático</b>
-          <p class="sutil pequena">Sem ele, os dados ficam só neste celular.</p>
-          <input id="sync-token" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="cole aqui o token (github_pat_...)">
-          <button class="principal" id="sync-ligar">Ligar o backup</button>
+      <div id="hab-painel-mes" hidden>
+        <header class="dia-nav">
+          <button class="icone" id="mes-ant" aria-label="Mês anterior">‹</button>
+          <div class="dia-titulo"><b id="mes-label"></b><span id="mes-sub"></span><button class="link ir-hoje" id="ir-mes" hidden>Voltar para este mês</button></div>
+          <button class="icone" id="mes-prox" aria-label="Próximo mês">›</button>
+        </header>
+        <div id="mes-panorama">
+          <div class="capa resumo" id="pan-resumo">
+            <b id="pan-media"></b>
+            <span>constância média do mês</span>
+            <p id="pan-frase"></p>
+          </div>
+          <button class="link pan-zoom" id="pan-zoom">Ampliar os dias que já passaram</button>
+          <div id="pan-habitos"></div>
+          <p class="meta legenda"><span><i class="c ok"></i>feito</span> <span><i class="c parcial"></i>em parte</span> <span><i class="c x"></i>não feito</span> <span><i class="c na"></i>não se aplica</span> <span><i class="c vazio"></i>sem marcação</span></p>
         </div>
       </div>
     </section>
 
-    <!-- ================= ENTREVISTA ================= -->
+    <!-- ================= JOURNAL ================= -->
+    <section id="tela-journal" class="tela" hidden>
+      <header class="topo">
+        <h1>Journal</h1>
+        <button class="icone-redondo" id="jor-lupa" aria-label="Procurar"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+      </header>
+      <input id="jor-busca" class="campo" type="search" placeholder="Procurar nas notas e entrevistas" hidden>
+      <div class="faixa-rola chips" id="jor-filtros">
+        <button data-f="tudo" aria-pressed="true">Tudo</button>
+        <button data-f="entrevistas" aria-pressed="false">Entrevistas</button>
+        <button data-f="notas" aria-pressed="false">Notas</button>
+        <button data-f="galeria" aria-pressed="false">Galeria</button>
+      </div>
+      <div class="faixa-rola" id="jor-espacos"></div>
+      <button class="atalho-entrevista" id="jor-entrevista"></button>
+      <div class="mural" id="jor-mural"></div>
+      <button class="fab menta fab-largo" id="jor-nova">+ Nota</button>
+    </section>
+
+    <!-- ================= ENTREVISTA (abre por cima, sem botão na barra) ================= -->
     <section id="tela-entrevista" class="tela" hidden>
       <div id="ent-inicio">
+        <header class="topo"><button class="link" id="ent-fechar">‹ Voltar</button></header>
         <h1>Fale, que eu pergunto.</h1>
-        <p class="sutil">A entrevista passa por alguns temas, um de cada vez. Você responde falando e pode pular qualquer um. No fim, ela vai sozinha para o backup, e o Claude lê de lá para montar a entrada do diário.</p>
+        <p class="meta">A entrevista passa por alguns temas, um de cada vez. Responda falando e pule o que quiser. No fim, ela vai sozinha para o backup e para o Journal do PC.</p>
         <button class="opcao" id="ent-dia">
           <b>O dia de hoje</b>
           <span>7 temas: o que aconteceu, coração, mente, música e cultura, corpo, o que lembrar, amanhã</span>
@@ -81,96 +170,93 @@
         </button>
         <div id="ent-memoria-nome" hidden>
           <label for="memoria-titulo"><b>Sobre o que vamos falar?</b></label>
-          <input id="memoria-titulo" placeholder="Ex.: Pipa, setembro de 2026">
-          <button class="principal" id="ent-memoria-ir">Começar</button>
+          <input id="memoria-titulo" class="campo" placeholder="Ex.: Pipa, setembro de 2026">
+          <button class="botao menta" id="ent-memoria-ir">Começar</button>
         </div>
         <div id="ent-guardadas"></div>
-
-        <div class="cartao groq" id="groq-box">
-          <b>Transcrição com Whisper</b>
-          <p class="sutil pequena" id="groq-status"></p>
-          <div id="groq-form">
-            <input id="groq-chave" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="cole a chave do Groq (gsk_...)">
-            <button class="principal" id="groq-salvar">Salvar a chave</button>
-          </div>
-          <button class="link" id="groq-trocar" hidden>Trocar a chave</button>
-        </div>
       </div>
 
       <div id="ent-passo" hidden>
         <div class="ent-topo">
           <button class="link" id="ent-sair">Sair</button>
-          <span id="ent-prog" class="sutil"></span>
+          <span id="ent-prog" class="meta"></span>
         </div>
         <h2 id="ent-tema"></h2>
         <ul id="ent-perguntas" class="perguntas"></ul>
-        <textarea id="ent-resposta" rows="7" placeholder="Toque em Falar, ou no microfone do teclado."></textarea>
+        <textarea id="ent-resposta" rows="7" placeholder="Toque em Gravar, ou no microfone do teclado."></textarea>
         <button class="falar" id="ent-gravar" aria-pressed="false" hidden><span class="ponto"></span><span id="ent-gravar-txt">Gravar</span></button>
         <button class="falar" id="ent-falar" aria-pressed="false"><span class="ponto"></span><span id="ent-falar-txt">Falar</span></button>
-        <p id="ent-dica" class="sutil pequena"></p>
+        <p id="ent-dica" class="meta"></p>
         <div class="ent-botoes">
-          <button class="secundario" id="ent-voltar">Voltar</button>
-          <button class="principal" id="ent-prox">Próximo</button>
+          <button class="botao contorno" id="ent-voltar">Voltar</button>
+          <button class="botao menta" id="ent-prox">Próximo</button>
         </div>
       </div>
 
       <div id="ent-fim" hidden>
         <h1 id="ent-fim-titulo">Memória guardada.</h1>
-        <p class="sutil">Ela já foi para o backup. Na próxima conversa, diga ao Claude "tem memória nova no journal": ele lê de lá e monta a entrada.</p>
-        <button class="principal" id="ent-nova">Voltar ao início</button>
+        <p class="meta">Ela já foi para o backup e aparece no Journal do PC.</p>
+        <button class="botao menta" id="ent-nova">Voltar ao início</button>
         <button class="link" id="ent-compartilhar">Compartilhar o texto com alguém</button>
       </div>
     </section>
 
-    <!-- ================= MÊS ================= -->
-    <section id="tela-mes" class="tela" hidden>
-      <header class="dia-nav">
-        <button class="icone" id="mes-ant" aria-label="Mês anterior">‹</button>
-        <div class="dia-titulo"><b id="mes-label"></b><span id="mes-sub"></span><button class="link ir-hoje" id="ir-mes" hidden>Voltar para este mês</button></div>
-        <button class="icone" id="mes-prox" aria-label="Próximo mês">›</button>
-      </header>
+    <!-- ================= AJUSTES ================= -->
+    <section id="tela-ajustes" class="tela" hidden>
+      <header class="topo"><button class="link" id="aj-fechar">‹ Início</button></header>
+      <h1>Ajustes</h1>
 
-      <div class="seg seg3" role="group" aria-label="O que ver">
-        <button id="vis-plano" aria-pressed="true">Plano</button>
-        <button id="vis-tweets" aria-pressed="false">Tweets</button>
-        <button id="vis-panorama" aria-pressed="false">Panorama</button>
-      </div>
+      <h2 class="secao">O que mostrar na Início</h2>
+      <div class="card lista-chaves" id="aj-inicio"></div>
 
-      <div id="mes-plano" hidden>
-        <form id="plano-trava" hidden>
-          <h2>O plano é só seu.</h2>
-          <p class="sutil">Ele fica guardado com senha, porque o código do app é público. Digite a senha uma vez; este celular lembra.</p>
-          <input id="plano-senha" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="xxxx-xxxx-xxxx">
-          <button class="principal" type="submit">Abrir o plano</button>
-        </form>
-        <div id="plano-conteudo"></div>
-      </div>
+      <h2 class="secao">Contadores pessoais</h2>
+      <div class="card" id="aj-contadores"></div>
 
-      <div id="mes-tweets" hidden>
-        <ol id="lista-tweets" class="tweets"></ol>
-      </div>
+      <h2 class="secao">Avisos</h2>
+      <div class="card lista-chaves" id="aj-avisos"></div>
 
-      <div id="mes-panorama" hidden>
-        <button class="link pan-zoom" id="pan-zoom">Ampliar os dias que já passaram</button>
-        <div class="cartao resumo" id="pan-resumo">
-          <b id="pan-media"></b>
-          <span class="sutil">constância média do mês</span>
-          <p id="pan-frase"></p>
+      <h2 class="secao">Backup e ligação com o PC</h2>
+      <div class="card">
+        <p class="meta"><span id="sync-status"></span> <button class="link" id="sync-agora" hidden>Sincronizar agora</button></p>
+        <div id="sync-form" hidden>
+          <b>Ligue o backup automático</b>
+          <p class="meta">Sem ele, os dados ficam só neste celular, e as tarefas não chegam no PC.</p>
+          <input id="sync-token" class="campo" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="cole aqui o token (github_pat_...)">
+          <button class="botao menta" id="sync-ligar">Ligar o backup</button>
         </div>
-        <div id="pan-habitos"></div>
-        <p class="sutil pequena legenda"><span><i class="c ok"></i>feito</span> <span><i class="c parcial"></i>em parte</span> <span><i class="c x"></i>não feito</span> <span><i class="c na"></i>não se aplica</span> <span><i class="c vazio"></i>sem marcação</span></p>
+        <p class="meta" id="aj-ligacao"></p>
       </div>
 
+      <h2 class="secao">Transcrição da entrevista</h2>
+      <div class="card" id="groq-box">
+        <p class="meta" id="groq-status"></p>
+        <div id="groq-form">
+          <input id="groq-chave" class="campo" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="cole a chave do Groq (gsk_...)">
+          <button class="botao menta" id="groq-salvar">Salvar a chave</button>
+        </div>
+        <button class="link" id="groq-trocar" hidden>Trocar a chave</button>
+      </div>
     </section>
+
   </main>
 
-  <nav class="abas" aria-label="Telas">
-    <button data-tela="hoje" aria-current="page">Hoje</button>
-    <button data-tela="entrevista">Entrevista</button>
-    <button data-tela="mes">Mês</button>
+  <!-- folhas que sobem de baixo -->
+  <div id="veu" hidden></div>
+  <div class="folha" id="folha" hidden role="dialog" aria-modal="true"></div>
+
+  <!-- tela cheia por cima (nota aberta, editor, ditado) -->
+  <div class="sobre" id="cheia" hidden></div>
+
+  <nav class="barra" aria-label="Telas">
+    <button data-tela="inicio" aria-current="page"><span class="pilula"><img alt="" data-icone="inicio"></span><span>Início</span></button>
+    <button data-tela="tarefas"><span class="pilula"><img alt="" data-icone="tarefas"></span><span>Tarefas</span></button>
+    <button data-tela="habitos"><span class="pilula"><img alt="" data-icone="habitos"></span><span>Hábitos</span></button>
+    <button data-tela="journal"><span class="pilula"><img alt="" data-icone="journal"></span><span>Journal</span></button>
   </nav>
 
   <div id="aviso" role="status"></div>
+  <div id="lanche" role="status" hidden><span id="lanche-txt"></span><button id="lanche-acao">Desfazer</button></div>
   <script src="app.js"></script>
+  <script type="module" src="novo.js"></script>
 </body>
 </html>
