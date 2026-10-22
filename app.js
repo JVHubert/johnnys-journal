@@ -867,7 +867,8 @@ function agendarSync() {
 
 // junta o que está no celular com o que está no GitHub: em cada dia, vence a versão mais recente
 function juntar(local, remoto) {
-  const r = { dias: { ...remoto.dias }, memorias: [], plano: {}, planoT: 0 };
+  // Começa com tudo das duas pontas: um campo novo (de outra versão do app ou do Journal do PC) não se perde.
+  const r = { ...remoto, ...local, dias: { ...remoto.dias }, memorias: [], plano: {}, planoT: 0 };
   for (const [k, d] of Object.entries(local.dias)) if (!r.dias[k] || (d.t || 0) >= (r.dias[k].t || 0)) r.dias[k] = d;
   const mems = new Map();
   for (const m of [...(remoto.memorias || []), ...(local.memorias || [])]) {
@@ -880,8 +881,26 @@ function juntar(local, remoto) {
   // sugestões de tweet do Claude: ficam fora dos dias para nunca sobrescrever o que o JV marcou
   r.sugestoes = { ...(remoto.sugestoes || {}) };
   for (const [k, s] of Object.entries(local.sugestoes || {})) if (!r.sugestoes[k] || (s.t || 0) >= (r.sugestoes[k].t || 0)) r.sugestoes[k] = s;
+  // caixa: tarefas escritas no celular para o Journal do PC (junta as duas pontas pelo id)
+  const caixa = new Map();
+  for (const c of [...(remoto.caixa || []), ...(local.caixa || [])]) if (c && c.id && (!caixa.has(c.id) || (c.t || 0) >= (caixa.get(c.id).t || 0))) caixa.set(c.id, c);
+  if (caixa.size) r.caixa = [...caixa.values()]; else delete r.caixa;
   return r;
 }
+
+// ================= CAIXA DE ENTRADA DO JOURNAL (PC) =================
+// Tarefa escrita aqui vai em dados.caixa; o Journal do PC lê o backup e cria a tarefa lá (entende datas,
+// "@projeto", "#etiqueta", "!" como a tarefa rápida). A tela para escrever vem depois; por enquanto:
+// jjEnviarTarefa('Pagar a luz sexta @casa') no console.
+function enviarTarefaParaOJournal(texto) {
+  const t = String(texto || '').trim();
+  if (!t) return null;
+  const item = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), texto: t, t: Date.now() };
+  dados.caixa = [...(dados.caixa || []), item];
+  salvar();
+  return item;
+}
+window.jjEnviarTarefa = enviarTarefaParaOJournal;
 
 async function sincronizar() {
   const tk = token(); if (!tk || DEMO) return 'desligado';
