@@ -619,12 +619,14 @@ async function modeloTexto(k) {
   try { localStorage.setItem('jj-groq-modelo', JSON.stringify({ id, t: Date.now() })); } catch (e) { /* segue */ }
   return id;
 }
-// O tweet sai do serviço do Journal na nuvem (Gemini 3.5 Flash, escolha do JV em 23/10); se ele falhar,
-// o Groq direto daqui, como antes.
+// O tweet sai do serviço do Journal na nuvem (Gemini 3.5 Flash, escolha do JV em 23/10), que recebe a
+// entrevista INTEIRA e escolhe o que mais vale lembrar; se ele falhar, o Groq direto daqui, como antes.
 async function tweetComGroq(e) {
   const base = textoBase(e);
-  if (base && window.tweetPelaNuvem) {
-    try { const t = await window.tweetPelaNuvem(base); if (t) return t; } catch (err) { /* cai para o Groq */ }
+  const temas = ENTREVISTAS[e.modo || 'dia'] || [];
+  const inteira = (e.respostas || []).map((x, i) => (x && String(x).trim() ? `${(temas[i] || {}).tema || 'Parte ' + (i + 1)}: ${String(x).trim()}` : '')).filter(Boolean).join('\n\n');
+  if (inteira && window.tweetPelaNuvem) {
+    try { const t = await window.tweetPelaNuvem(inteira); if (t) return t; } catch (err) { /* cai para o Groq */ }
   }
   const k = chaveGroq();
   if (!k || !base) return null;
