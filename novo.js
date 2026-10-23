@@ -455,8 +455,7 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
     el.querySelector('#dit-txt').textContent = 'Transcrevendo…';
     try {
       const blob = new Blob(pedacos, { type: rec.mimeType || tipo || 'audio/webm' });
-      const audio = await paraBase64(blob);
-      const r = await nuvem('/ditado', { audio, hoje: hoje(), projetos: projetos(), etiquetas: [], app: 'tracker', soTexto: !!soTexto });
+      const r = await falaParaTexto(blob, { hoje: hoje(), projetos: projetos(), etiquetas: [], app: 'tracker', soTexto: !!soTexto });
       if (cancelado) return;
       el.classList.remove('pensando');
       el.querySelector('#dit-txt').textContent = soTexto ? 'Confira o texto:' : (r.tarefas.length ? 'Confira as tarefas:' : 'Não achei tarefas nessa fala.');
@@ -485,6 +484,32 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
   };
   el.querySelector('#dit-parar').onclick = () => { if (rec.state === 'recording') rec.stop(); };
   rec.start();
+}
+// A transcrição da Cloudflare tem uma cota grátis por dia. Se ela acabar, o áudio vai para o Whisper
+// do Groq com a chave que já está no celular (a mesma do Gravar da entrevista); a separação das
+// tarefas continua no serviço do Journal, que recebe só o texto.
+const COTA_ACABOU = /4006|neurons|allocation/i;
+async function falaParaTexto(blob, extra) {
+  try { return await nuvem('/ditado', { audio: await paraBase64(blob), ...extra }); }
+  catch (err) {
+    if (!COTA_ACABOU.test(err.message)) throw err;
+    if (!chaveGroq()) throw new Error('a cota grátis de transcrição de hoje acabou; volta às 21h. Para não depender dela, ponha a chave do Groq em Ajustes');
+    const texto = await textoPeloGroq(blob);
+    if (!texto) return { texto: '', tarefas: [] };
+    return extra.soTexto ? { texto, tarefas: [] } : nuvem('/ditado', { ...extra, texto });
+  }
+}
+async function textoPeloGroq(blob) {
+  const form = new FormData();
+  form.append('file', blob, `ditado.${/ogg/.test(blob.type) ? 'ogg' : 'webm'}`);
+  form.append('model', 'whisper-large-v3-turbo');
+  form.append('language', 'pt');
+  form.append('response_format', 'json');
+  form.append('temperature', '0');
+  form.append('prompt', GROQ_CONTEXTO);
+  const r = await fetch(GROQ_URL, { method: 'POST', headers: { Authorization: `Bearer ${chaveGroq()}` }, body: form });
+  if (!r.ok) throw new Error(r.status === 401 ? 'o Groq recusou a chave' : r.status === 429 ? 'o Groq também chegou no limite por agora' : 'Groq ' + r.status);
+  return ((await r.json()).text || '').trim();
 }
 const paraBase64 = (blob) => new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = falha; r.readAsDataURL(blob); });
 function ditarTarefas() {
@@ -784,8 +809,7 @@ function ditarNaNota(el, texto) {
       el.querySelector('[data-a="parar"]').hidden = true;
       estado.textContent = 'Transcrevendo…'; dica.textContent = '';
       try {
-        const audio = await paraBase64(new Blob(pedacos, { type: rec.mimeType || tipo || 'audio/webm' }));
-        const r = await nuvem('/ditado', { audio, hoje: hoje(), projetos: [], etiquetas: [], app: 'tracker', soTexto: true });
+        const r = await falaParaTexto(new Blob(pedacos, { type: rec.mimeType || tipo || 'audio/webm' }), { hoje: hoje(), projetos: [], etiquetas: [], app: 'tracker', soTexto: true });
         if (cancelado) return;
         const novo = (r.texto || '').trim();
         if (!novo) avisar('Não veio texto dessa gravação. Confira o microfone e tente de novo.');
