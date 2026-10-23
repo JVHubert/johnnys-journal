@@ -113,8 +113,9 @@ function estado(h, k) {
   return v === true ? 'ok' : v === 'x' ? 'x' : '';
 }
 const feito = (h, k) => estado(h, k) === 'ok';
-// conta para a constância: dias passados em que o hábito valia (não se aplica fica de fora)
-const conta = (h, k) => ativo(h, k) && k <= hoje() && estado(h, k) !== 'na';
+// conta para a constância: dias até hoje em que o hábito valia e foi marcado ("não se aplica" e
+// "sem marcação" ficam de fora; igual à aba Hábitos do Journal do PC)
+const conta = (h, k) => ativo(h, k) && k <= hoje() && !['na', ''].includes(estado(h, k));
 
 // ---------- aviso ----------
 let avisoT;
