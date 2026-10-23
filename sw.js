@@ -1,6 +1,6 @@
 // Guarda os arquivos no aparelho para o app abrir sem internet.
 // Aumente a versão a cada publicação para os celulares baixarem a nova.
-const VERSAO = 'journal-v16';
+const VERSAO = 'journal-v17';
 const ARQUIVOS = [
   './',
   'index.html',
