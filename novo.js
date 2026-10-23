@@ -15,7 +15,10 @@ const DIAS3 = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const MES3 = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const diaCurto = (k) => { const d = deChave(k); return `${DIAS3[d.getDay()]} ${d.getDate()} ${MES3[d.getMonth()]}`; };
 const difDias = (a, b) => Math.round((deChave(a) - deChave(b)) / 864e5);
-const ICONE_MIC = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+// Microfone do Claude Design: cápsula cheia sobre uma base mais apagada.
+const mic = (t = 24) => `<svg viewBox="0 0 24 24" width="${t}" height="${t}" aria-hidden="true"><rect x="5" y="15" width="14" height="6" rx="2" fill="currentColor" opacity=".7"/><rect x="8" y="2.5" width="8" height="14" rx="4" fill="currentColor"/></svg>`;
+const ICONE_MIC = mic(24);
+const ICONE_CAMERA = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="2.5" y="6.5" width="19" height="14" rx="3" fill="#4a3a32"/><rect x="8" y="3.5" width="8" height="4" rx="1.5" fill="#4a3a32"/><circle cx="12" cy="13.5" r="4" fill="#ad9588"/></svg>';
 
 const ESPACOS = [
   { id: 'journal', nome: "Johnny's Journal", cor: '#6EE29A', letra: 'J' },
@@ -430,8 +433,9 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
   const el = h(`<div class="ditando">
     <button class="link" id="dit-cancelar">Cancelar</button>
     <h2>${e(titulo)}</h2>
-    <div class="onda" aria-hidden="true">${'<i></i>'.repeat(24)}</div>
+    <div class="onda" aria-hidden="true"></div>
     <p class="relogio" id="dit-relogio">0:00</p>
+    <p class="aviso-mudo" role="alert" hidden></p>
     <p class="meta" id="dit-txt">Fale à vontade, com pausas. O texto aparece quando você parar.</p>
     <div class="dit-texto" id="dit-saida" hidden></div>
     <button class="parar" id="dit-parar" aria-label="Parar"><i></i></button>
@@ -439,7 +443,8 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
   </div>`);
   let cancelado = false, inicio = Date.now();
   const relogio = setInterval(() => { const s = Math.floor((Date.now() - inicio) / 1000); el.querySelector('#dit-relogio').textContent = `${Math.floor(s / 60)}:${pad(s % 60)}`; }, 500);
-  const terminar = () => { clearInterval(relogio); fluxo.getTracks().forEach((x) => x.stop()); };
+  const desligarMedidor = window.medidorDeSom(fluxo, el.querySelector('.onda'), el.querySelector('.aviso-mudo'));
+  const terminar = () => { clearInterval(relogio); desligarMedidor(); el.querySelector('.onda').hidden = false; fluxo.getTracks().forEach((x) => x.stop()); };
   abrirCheia(el, () => { cancelado = true; if (rec.state === 'recording') rec.stop(); terminar(); });
   el.querySelector('#dit-cancelar').onclick = fecharCamada;
   rec.onstop = async () => {
@@ -513,7 +518,8 @@ function itensJournal() {
   }
   return out.sort((a, b) => (b.data || '').localeCompare(a.data || '') || b.t - a.t);
 }
-const ROTULO_TIPO = { entrevista: `<span class="tipo menta">${'<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/></svg>'} Entrevista</span>`, tweet: '<span class="tipo violeta">Tweet do dia</span>', nota: '<span class="tipo">Nota</span>' };
+const ROTULO_TIPO = { entrevista: `<span class="tipo violeta">${mic(13)} Entrevista</span>`, tweet: '<span class="tipo violeta">Tweet do dia</span>', nota: '<span class="tipo">Nota</span>' };
+const NOME_TIPO = { entrevista: 'Entrevista', tweet: 'Tweet do dia', nota: 'Nota' };
 const dataBonita = (k) => { if (!k) return ''; const d = deChave(k); return `${d.getDate()} ${MES3[d.getMonth()]}${d.getFullYear() !== deChave(hoje()).getFullYear() ? ' ' + d.getFullYear() : ''}`; };
 
 function cartao(it) {
@@ -590,7 +596,7 @@ function abrirEntrevistaDeHoje() {
   iniciarEnt('dia');
 }
 
-// ---------- nota aberta ----------
+// ---------- nota aberta (leitura limpa; editar e trocar foto embaixo) ----------
 function abrirItem(it) {
   const esp = espaco(it.espaco);
   let corpo = '';
@@ -601,38 +607,51 @@ function abrirItem(it) {
     corpo = entr ? entr.respostas.map((r, i) => (r ? `<h3>${e(temas[i] ? temas[i].tema : 'Parte ' + (i + 1))}</h3><p>${e(r)}</p>` : '')).join('') : '';
     if (!corpo && it.dia) corpo = `<p>${e(lerDia(it.dia).tweet || '')}</p>`;
   }
+  const d = it.data ? deChave(it.data) : null;
+  const hora = it.nota && it.nota.criada ? new Date(it.nota.criada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+  const quando = d ? d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== deChave(hoje()).getFullYear() ? { year: 'numeric' } : {}) }).replace('-feira', '') : '';
+  const ehNota = it.tipo === 'nota';
   const el = h(`<article class="nota-aberta">
-    <div class="na-topo"><button class="link" data-a="voltar">‹ Journal</button></div>
+    <div class="na-barra">
+      <button class="icone-b" data-a="voltar" aria-label="Voltar">‹</button><span></span>
+      <button class="icone-b apagado" data-a="editar" aria-label="Editar">✎</button>
+      ${ehNota ? '<button class="icone-b apagado" data-a="mais" aria-label="Mais opções">⋯</button>' : ''}
+    </div>
     ${it.foto ? '<div class="na-foto"><img alt=""></div>' : ''}
-    <p class="meta"><i class="ponto-esp" style="background:${esp.cor}"></i>${e(esp.nome)} · ${ROTULO_TIPO[it.tipo]}</p>
-    <h1>${e(it.titulo || 'Sem título')}</h1>
-    <p class="meta">${e(it.data ? deChave(it.data).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '')}</p>
-    <div class="na-texto">${corpo}</div>
-    <div class="na-botoes">
-      ${it.tipo === 'nota' ? '<button class="botao contorno" data-a="foto">Trocar foto</button>' : ''}
+    <div class="na-corpo">
+      <p class="na-tipo"><i style="background:${esp.cor}"></i>${NOME_TIPO[it.tipo]} · ${e(esp.nome)}</p>
+      <h1>${e(it.titulo || 'Sem título')}</h1>
+      <p class="na-data">${e(quando)}${hora ? ' · ' + hora : ''}</p>
+      <div class="na-texto">${corpo}</div>
+    </div>
+    <div class="na-pe">
+      <span>Edição longa no PC</span>
+      ${ehNota ? `<button class="botao cinza" data-a="foto">${it.foto ? 'Trocar foto' : 'Pôr foto'}</button>` : ''}
       <button class="botao menta" data-a="editar">Editar</button>
     </div>
-    <p class="meta centro">Edição longa no PC</p>
-    ${it.tipo === 'nota' ? '<button class="link coral centro" data-a="apagar">Apagar nota</button>' : ''}
   </article>`);
   if (it.foto) carregarFoto(it.foto, el.querySelector('.na-foto img'));
   el.querySelector('[data-a="voltar"]').onclick = fecharCamada;
-  el.querySelector('[data-a="editar"]').onclick = () => {
+  el.querySelectorAll('[data-a="editar"]').forEach((bt) => (bt.onclick = () => {
     fecharCamada().then(() => {
       if (it.tipo === 'nota') editarNota(it.nota);
       else if (it.memoria) { history.pushState({ tela: 'entrevista' }, ''); irPara('entrevista'); ent = { ...it.memoria, passo: 0 }; mostrarEnt('ent-passo'); renderPasso(); }
       else if (it.tipo === 'entrevista') { atual = it.dia; history.pushState({ tela: 'entrevista' }, ''); irPara('entrevista'); iniciarEnt('dia'); }
       else { atual = it.dia; irPara('habitos'); setTimeout(() => $('tweet').focus(), 80); }
     });
-  };
+  }));
   const fotoB = el.querySelector('[data-a="foto"]');
   if (fotoB) fotoB.onclick = () => escolherFoto('galeria', async (blob) => { await guardarFotoDaNota(it.nota, blob); fecharCamada(); renderJournal(); });
-  const apagarB = el.querySelector('[data-a="apagar"]');
-  if (apagarB) apagarB.onclick = () => {
-    const n = it.nota;
-    mexerNota(n.id, (x) => { x.apagada = true; });
-    fecharCamada();
-    lanche('Nota apagada', () => mexerNota(n.id, (x) => { x.apagada = false; }));
+  const maisB = el.querySelector('[data-a="mais"]');
+  if (maisB) maisB.onclick = () => {
+    const menu = h('<div class="menu-folha"><button class="coral" data-a="apagar">Apagar nota</button></div>');
+    menu.querySelector('[data-a="apagar"]').onclick = async () => {
+      const n = it.nota;
+      await fecharCamada(); await fecharCamada();
+      mexerNota(n.id, (x) => { x.apagada = true; });
+      lanche('Nota apagada', () => mexerNota(n.id, (x) => { x.apagada = false; }));
+    };
+    abrirFolha(menu);
   };
   abrirCheia(el);
 }
@@ -671,40 +690,121 @@ function abrirNovaNota() {
   el.querySelector('[data-a="camera"]').onclick = () => comFoto('camera');
   el.querySelector('[data-a="galeria"]').onclick = () => comFoto('galeria');
   el.querySelector('[data-a="ditar"]').onclick = () => {
-    fecharCamada().then(() => gravarFala({ titulo: 'Ditando a nota', soTexto: true, aoTexto: (txt) => editarNota({ espaco: esp, texto: txt }) }));
+    fecharCamada().then(() => editarNota({ espaco: esp }, null, true));
   };
   abrirFolha(el);
 }
-function editarNota(n, fotoNova = null) {
+function editarNota(n, fotoNova = null, comecarDitando = false) {
   const nova = !n.id;
   const el = h(`<div class="editor-nota">
-    <div class="na-topo"><button class="link" data-a="cancelar">Cancelar</button><select data-a="espaco">${ESPACOS.map((s) => `<option value="${s.id}"${s.id === (n.espaco || 'journal') ? ' selected' : ''}>${e(s.nome)}</option>`).join('')}</select></div>
+    <div class="en-barra">
+      <button class="link apagado" data-a="cancelar">Cancelar</button>
+      <label class="en-espaco"><select data-a="espaco" aria-label="Espaço">${ESPACOS.map((s) => `<option value="${s.id}"${s.id === (n.espaco || 'journal') ? ' selected' : ''}>${e(s.nome)}</option>`).join('')}</select> ▾</label>
+      <button class="link forte" data-a="salvar">Salvar</button>
+    </div>
     <div class="na-foto" hidden><img alt=""></div>
     <input class="en-titulo" placeholder="Título" value="${e(n.titulo || '')}">
-    <textarea class="en-texto" rows="12" placeholder="Escreva aqui…">${e(n.texto || '')}</textarea>
-    <button class="botao menta grande" data-a="salvar">Salvar</button>
+    <textarea class="en-texto" rows="10" placeholder="Escreva aqui…">${e(n.texto || '')}</textarea>
+    <div class="en-pe">
+      <div class="en-ferramentas">
+        <button class="redondo cinza" data-a="camera" aria-label="Foto">${ICONE_CAMERA}</button>
+        <button class="redondo violeta" data-a="ditar" aria-label="Ditar">${ICONE_MIC}</button>
+      </div>
+      <div class="painel-ditado" hidden>
+        <div class="onda" aria-hidden="true"></div>
+        <p class="dit-estado">Ouvindo… <b class="dit-relogio">0:00</b></p>
+        <p class="aviso-mudo" role="alert" hidden></p>
+        <div class="dit-botoes">
+          <button class="redondo cinza" data-a="camera" aria-label="Foto">${ICONE_CAMERA}</button>
+          <button class="parar" data-a="parar" aria-label="Parar"><i></i></button>
+          <button class="redondo cinza aa" data-a="teclado" aria-label="Parar e escrever">Aa</button>
+        </div>
+        <p class="dit-dica">toque no quadrado para parar</p>
+      </div>
+    </div>
   </div>`);
-  const img = el.querySelector('.na-foto img');
-  if (fotoNova) { img.src = URL.createObjectURL(fotoNova); el.querySelector('.na-foto').hidden = false; }
+  const img = el.querySelector('.na-foto img'), texto = el.querySelector('.en-texto');
+  const mostrarFoto = (blob) => { fotoNova = blob; img.src = URL.createObjectURL(blob); el.querySelector('.na-foto').hidden = false; };
+  if (fotoNova) mostrarFoto(fotoNova);
   else if (n.foto) { el.querySelector('.na-foto').hidden = false; carregarFoto(n.foto, img); }
+  let ditado = null;
   el.querySelector('[data-a="cancelar"]').onclick = fecharCamada;
+  el.querySelectorAll('[data-a="camera"]').forEach((b) => (b.onclick = () => escolherFoto('camera', mostrarFoto)));
+  el.querySelector('[data-a="ditar"]').onclick = () => { ditado = ditarNaNota(el, texto); };
+  el.querySelector('[data-a="parar"]').onclick = () => ditado && ditado.parar();
+  el.querySelector('[data-a="teclado"]').onclick = () => { ditado && ditado.parar(); texto.focus(); };
   el.querySelector('[data-a="salvar"]').onclick = async () => {
-    const titulo = el.querySelector('.en-titulo').value.trim(), texto = el.querySelector('.en-texto').value.trim();
-    if (!titulo && !texto && !fotoNova && !n.foto) { fecharCamada(); return; }
+    if (ditado && ditado.ouvindo()) { avisar('Pare o ditado primeiro (quadrado).'); return; }
+    const titulo = el.querySelector('.en-titulo').value.trim(), corpo = texto.value.trim();
+    if (!titulo && !corpo && !fotoNova && !n.foto) { fecharCamada(); return; }
     const esp = el.querySelector('[data-a="espaco"]').value;
     let nota = n;
     if (nova) {
-      nota = { id: novoId(), espaco: esp, titulo, texto, foto: null, data: hoje(), criada: Date.now(), t: Date.now() };
+      nota = { id: novoId(), espaco: esp, titulo, texto: corpo, foto: null, data: hoje(), criada: Date.now(), t: Date.now() };
       dados.notas = [...(dados.notas || []), nota];
-    } else Object.assign(nota, { espaco: esp, titulo, texto, t: Date.now() });
+    } else Object.assign(nota, { espaco: esp, titulo, texto: corpo, t: Date.now() });
     if (fotoNova) await guardarFotoDaNota(nota, fotoNova, true);
     salvar();
     fecharCamada();
     renderJournal(); renderInicio();
     avisar(nova ? 'Nota guardada. Ela vai também para o PC.' : 'Nota salva.');
   };
-  abrirCheia(el);
-  if (nova && !n.texto && !fotoNova) setTimeout(() => el.querySelector('.en-texto').focus(), 80);
+  abrirCheia(el, () => ditado && ditado.cancelar());
+  if (comecarDitando) ditado = ditarNaNota(el, texto);
+  else if (nova && !n.texto && !fotoNova) setTimeout(() => texto.focus(), 80);
+}
+
+// Ditado dentro do editor: o painel de baixo mostra o som que chega (e avisa se ficar mudo);
+// ao parar, o áudio vai para o serviço do Journal e o texto entra no fim da nota.
+function ditarNaNota(el, texto) {
+  const painel = el.querySelector('.painel-ditado'), ferr = el.querySelector('.en-ferramentas');
+  const estado = el.querySelector('.dit-estado'), dica = el.querySelector('.dit-dica');
+  let rec = null, fluxo = null, cancelado = false, desligar = () => {}, relogio = null;
+  const fechar = () => { clearInterval(relogio); desligar(); fluxo && fluxo.getTracks().forEach((x) => x.stop()); painel.hidden = true; ferr.hidden = false; };
+  (async () => {
+    try { fluxo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (err) { avisar('Permita o microfone para o app (cadeado na barra de endereço do Firefox).'); return; }
+    if (cancelado) { fluxo.getTracks().forEach((x) => x.stop()); return; }
+    const tipo = tipoAudio();
+    rec = new MediaRecorder(fluxo, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : undefined);
+    const pedacos = [];
+    rec.ondataavailable = (ev) => { if (ev.data.size) pedacos.push(ev.data); };
+    painel.hidden = false; ferr.hidden = true; painel.classList.remove('pensando');
+    el.querySelector('[data-a="parar"]').hidden = false;
+    dica.textContent = 'toque no quadrado para parar';
+    desligar = window.medidorDeSom(fluxo, painel.querySelector('.onda'), painel.querySelector('.aviso-mudo'));
+    const inicio = Date.now();
+    const mostra = () => { const s = Math.floor((Date.now() - inicio) / 1000); estado.innerHTML = `Ouvindo… <b>${Math.floor(s / 60)}:${pad(s % 60)}</b>`; };
+    mostra(); relogio = setInterval(mostra, 500);
+    rec.onstop = async () => {
+      clearInterval(relogio); desligar(); fluxo.getTracks().forEach((x) => x.stop());
+      if (cancelado) return;
+      painel.querySelector('.onda').hidden = false;
+      painel.classList.add('pensando');
+      el.querySelector('[data-a="parar"]').hidden = true;
+      estado.textContent = 'Transcrevendo…'; dica.textContent = '';
+      try {
+        const audio = await paraBase64(new Blob(pedacos, { type: rec.mimeType || tipo || 'audio/webm' }));
+        const r = await nuvem('/ditado', { audio, hoje: hoje(), projetos: [], etiquetas: [], app: 'tracker', soTexto: true });
+        if (cancelado) return;
+        const novo = (r.texto || '').trim();
+        if (!novo) avisar('Não veio texto dessa gravação. Confira o microfone e tente de novo.');
+        else texto.value = (texto.value.trim() ? texto.value.trim() + (texto.value.endsWith('\n') ? '' : ' ') : '') + novo;
+        fechar();
+      } catch (err) {
+        painel.classList.remove('pensando');
+        estado.textContent = err.message === 'sem-ligacao' ? 'Falta ligar o backup em Ajustes.' : 'Não consegui transcrever (' + err.message + ').';
+        dica.textContent = '';
+        setTimeout(fechar, 4000);
+      }
+    };
+    rec.start();
+  })();
+  return {
+    parar: () => { if (rec && rec.state === 'recording') rec.stop(); },
+    cancelar: () => { cancelado = true; if (rec && rec.state === 'recording') rec.stop(); fechar(); },
+    ouvindo: () => !!rec && rec.state === 'recording',
+  };
 }
 
 // Foto: reduzida no celular (lado maior 1600 px), guardada aqui e enviada para o repositório privado
@@ -813,8 +913,11 @@ function cartoesContadores() {
   }
   for (const c of dados.contadores || []) {
     const n = difDias(c.data, hoje());
-    const txt = n > 0 ? `<b class="mostarda grande-n">${n}</b><small class="mostarda">faltam ${n === 1 ? '1 dia' : n + ' dias'}</small>` : n === 0 ? '<b class="grande-n">hoje</b><small>é hoje</small>' : `<b class="grande-n">${-n}</b><small>há ${-n === 1 ? '1 dia' : -n + ' dias'}</small>`;
-    lista.push(`<div class="contador pessoal"><span><b class="c-nome">${e(c.nome)}</b>${txt}</span></div>`);
+    const nome = `<b class="c-nome">${e(c.nome)}</b>`;
+    const txt = n > 0 ? `<b class="mostarda grande-n">${n}</b><span>${nome}<small class="mostarda">faltam ${n === 1 ? '1 dia' : n + ' dias'}</small></span>`
+      : n === 0 ? `<b class="grande-n">0</b><span>${nome}<small>é hoje</small></span>`
+      : `<b class="grande-n">${-n}</b><span>${nome}<small>há ${-n === 1 ? '1 dia' : -n + ' dias'}</small></span>`;
+    lista.push(`<div class="contador pessoal">${txt}</div>`);
   }
   lista.push('<button class="contador mais" id="ini-mais-contador">+ Contador</button>');
   return lista.join('');
@@ -825,6 +928,8 @@ function renderInicio() {
   $('ini-data').textContent = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   // ano em 12 tracinhos
   const m = agora.getMonth(), diasMes = new Date(agora.getFullYear(), m + 1, 0).getDate();
+  const ano = agora.getFullYear(), diasAno = (new Date(ano + 1, 0, 1) - new Date(ano, 0, 1)) / 864e5;
+  $('ini-ano-pct').textContent = Math.round(((agora - new Date(ano, 0, 1)) / 864e5 / diasAno) * 100) + '%';
   $('ini-ano').innerHTML = LETRAS.map((l, i) => `<span class="mes${i < m ? ' passado' : i === m ? ' atual' : ''}"><i style="${i === m ? `--p:${Math.round((agora.getDate() / diasMes) * 100)}%` : ''}"></i><small>${l}</small></span>`).join('');
   // contadores
   $('ini-contadores-box').hidden = !prefs.contadores;
@@ -842,7 +947,8 @@ function renderInicio() {
     if (!ligacao && !DEMO) box.appendChild(vazio('Ligue o backup em Ajustes para ver as tarefas do PC aqui.'));
     else if (!lista.length) box.appendChild(vazio('Nada para hoje.'));
     lista.slice(0, 3).forEach((t) => box.appendChild(linhaTarefa(t)));
-    $('ini-ver-tudo').textContent = lista.length > 3 ? `Ver tudo (${lista.length}) ›` : 'Ver tudo ›';
+    $('ini-hoje-n').textContent = lista.length || '';
+    $('ini-ver-tudo').textContent = 'Ver tudo ›';
   }
   // hábitos que faltam
   $('ini-habitos-box').hidden = !prefs.habitos;
@@ -851,16 +957,14 @@ function renderInicio() {
     const faltam = HABITOS.filter((x) => ativo(x, k) && !['ok', 'na'].includes(estado(x, k)));
     if (!faltam.length) box.appendChild(h('<p class="meta">Todos marcados hoje.</p>'));
     faltam.forEach((x) => {
-      const reg = lerDia(k);
-      const rot = x.tipo === 'agua' ? `Água ${reg.agua || 0}/3` : x.tipo === 'horas' ? `PM3 ${fmtH(reg.pm3 || 0)} +½` : x.curto;
-      const b = h(`<button class="chip-habito">${e(rot)}</button>`);
+      // Água e PM3 têm quantidade: o toque abre a tela Hábitos de hoje para marcar lá.
+      const b = h(`<button class="chip-habito"><i class="caixa"></i>${e(x.curto)}</button>`);
       b.onclick = () => {
+        if (x.tipo) { atual = k; irPara('habitos'); mostrarPainelHab('hoje'); return; }
         const r = dia(k);
-        if (x.tipo === 'agua') r.agua = Math.min(4, (r.agua || 0) + 1);
-        else if (x.tipo === 'horas') r.pm3 = Math.min(10, (r.pm3 || 0) + 0.5);
-        else r.h[x.id] = true;
+        r.h[x.id] = true;
         salvar(); renderInicio();
-        if (!x.tipo) lanche(`${x.curto}: feito`, () => { const r2 = dia(k); delete r2.h[x.id]; salvar(); renderInicio(); });
+        lanche(`${x.curto}: feito`, () => { const r2 = dia(k); delete r2.h[x.id]; salvar(); renderInicio(); });
       };
       box.appendChild(b);
     });
@@ -873,7 +977,7 @@ function renderInicio() {
     const box = $('ini-neste'); box.innerHTML = '';
     antigos.forEach((it) => {
       const anos = Number(k.slice(0, 4)) - Number(it.data.slice(0, 4));
-      const c = h(`<button class="neste">${it.foto ? '<span class="foto"><img alt=""></span>' : ''}<span><small class="menta">há ${anos} ${anos === 1 ? 'ano' : 'anos'}</small><b>${e(it.titulo)}</b><span class="trecho">${e(it.texto.slice(0, 140))}</span></span></button>`);
+      const c = h(`<button class="neste">${it.foto ? '<span class="foto"><img alt=""></span>' : ''}<span class="neste-txt"><small class="menta">há ${anos} ${anos === 1 ? 'ano' : 'anos'}</small><b>${e(it.titulo)}</b><span class="trecho">${e(it.texto.slice(0, 140))}</span></span></button>`);
       if (it.foto) carregarFoto(it.foto, c.querySelector('img'));
       c.onclick = () => abrirItem(it);
       box.appendChild(c);
@@ -884,7 +988,7 @@ function renderInicio() {
   const feita = !!(ent && ent.respostas.some(Boolean));
   const b = $('ini-entrevista');
   b.hidden = !prefs.entrevista;
-  b.textContent = feita ? 'Entrevista feita ✓' : 'Fazer a entrevista de hoje';
+  b.innerHTML = feita ? 'Entrevista feita ✓' : `${mic(18)}Fazer a entrevista de hoje`;
   b.className = feita ? 'botao contorno grande' : 'botao violeta grande';
 }
 function pontosCarrossel() {

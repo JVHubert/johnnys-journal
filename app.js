@@ -53,6 +53,8 @@ const ENTREVISTAS = {
   ],
 };
 
+// Microfone do Claude Design (cápsula + base), a cor da voz é o violeta
+const ICONE_MIC_18 = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="5" y="15" width="14" height="6" rx="2" fill="currentColor" opacity=".7"/><rect x="8" y="2.5" width="8" height="14" rx="4" fill="currentColor"/></svg>';
 const SEM = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const SEM1 = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
@@ -143,14 +145,16 @@ let atual = hoje() < INICIO ? INICIO : hoje();
 
 function renderHoje() {
   const d = deChave(atual), reg = lerDia(atual);
-  $('dia-label').textContent = `${SEM[d.getDay()]}, ${d.getDate()} de ${MESES[d.getMonth()]}`;
+  $('dia-label').textContent = `${SEM[d.getDay()][0].toUpperCase() + SEM[d.getDay()].slice(1)}, ${d.getDate()} de ${MESES[d.getMonth()]}`;
   const ehHoje = atual === hoje();
-  $('dia-sub').textContent = ehHoje ? 'hoje' : atual === somaDias(hoje(), -1) ? 'ontem' : atual === somaDias(hoje(), 1) ? 'amanhã' : '';
+  const valem = HABITOS.filter((h) => ativo(h, atual) && estado(h, atual) !== 'na');
+  const quando = ehHoje ? '' : atual === somaDias(hoje(), -1) ? 'ontem · ' : atual === somaDias(hoje(), 1) ? 'amanhã · ' : '';
+  $('dia-sub').textContent = `${quando}${valem.filter((h) => feito(h, atual)).length} de ${valem.length} feitos`;
   $('ir-hoje').hidden = ehHoje;
   $('dia-ant').disabled = atual <= INICIO;
 
-  // PM3
-  const mostraPm3 = atual <= PM3_FIM;
+  // PM3: o cartão do curso saiu da tela no redesenho (fica só a linha do hábito)
+  const mostraPm3 = false;
   $('pm3-card').hidden = !mostraPm3;
   if (mostraPm3) {
     const total = Object.values(dados.dias).reduce((s, x) => s + (x.pm3 || 0), 0);
@@ -172,7 +176,11 @@ function renderHoje() {
     if (!ativo(h, atual)) continue;
     if (h.grupo !== grupo) {
       grupo = h.grupo;
-      const g = document.createElement('div'); g.className = 'grupo'; g.textContent = grupo; lista.appendChild(g);
+      // "2/2" ao lado do grupo: quantos dos hábitos de tocar já estão feitos
+      const doGrupo = HABITOS.filter((x) => x.grupo === grupo && ativo(x, atual) && !x.tipo && estado(x, atual) !== 'na');
+      const g = document.createElement('div'); g.className = 'grupo';
+      g.innerHTML = `<span>${grupo}</span><small>${doGrupo.length ? `${doGrupo.filter((x) => feito(x, atual)).length}/${doGrupo.length}` : ''}</small>`;
+      lista.appendChild(g);
     }
     lista.appendChild(linhaHabito(h, reg));
   }
@@ -201,7 +209,7 @@ function linhaHabito(h, reg) {
   if (h.tipo === 'agua') {
     const el = document.createElement('div'); el.className = 'habito';
     const n = reg.agua || 0;
-    el.innerHTML = `<span class="txt">${h.nome}<small>${n >= 4 ? '4 garrafas: meta + bônus' : n >= 3 ? 'meta batida · a 4ª é bônus' : `${n} de 3 garrafas · a 4ª é bônus`}</small></span><span class="garrafas"></span>`;
+    el.innerHTML = `<span class="chk-lugar"></span><span class="txt">${h.nome}<small>${n >= 4 ? 'meta + bônus' : n >= 3 ? 'meta batida · a 4ª é bônus' : `${n} de 3 · a 4ª é bônus`}</small></span><span class="garrafas"></span>`;
     const box = el.querySelector('.garrafas');
     for (let i = 1; i <= 4; i++) {
       const b = document.createElement('button');
@@ -215,7 +223,7 @@ function linhaHabito(h, reg) {
   if (h.tipo === 'horas') {
     const el = document.createElement('div'); el.className = 'habito';
     const v = reg.pm3 || 0;
-    el.innerHTML = `<span class="txt">${h.nome}<small>${h.sub} · meta ${fds(atual) ? '3h' : '2,5h'}</small></span>
+    el.innerHTML = `<span class="chk-lugar"></span><span class="txt">${h.nome}<small>meta ${fds(atual) ? '3h' : '2,5h'}</small></span>
       <span class="stepper"><button aria-label="Menos meia hora">−</button><output>${fmtH(v)}</output><button aria-label="Mais meia hora">+</button></span>`;
     const [menos, mais] = el.querySelectorAll('button');
     menos.onclick = () => { const r = dia(atual); r.pm3 = Math.max(0, (r.pm3 || 0) - 0.5); salvar(); renderHoje(); };
@@ -228,7 +236,7 @@ function linhaHabito(h, reg) {
   b.dataset.estado = e || 'vazio';
   b.setAttribute('aria-label', `${h.nome}: ${{ ok: 'feito', x: 'não feito', na: 'não se aplica' }[e] || 'sem marcação'}. Toque para mudar.`);
   const av = avisoDoisDias(h);
-  b.innerHTML = `<span class="chk">${{ ok: '✓', x: '✗', na: '–' }[e] || ''}</span><span class="txt">${h.nome}${h.sub ? `<small>${h.sub}</small>` : ''}${e === 'na' ? '<small>não se aplica hoje</small>' : ''}${av ? `<small class="aviso2">${av}</small>` : ''}</span>`;
+  b.innerHTML = `<span class="chk-lugar"><span class="chk">${{ ok: '✓', x: '✗', na: '–' }[e] || ''}</span></span><span class="txt">${h.nome}${h.sub ? `<small>${h.sub}</small>` : ''}${e === 'na' ? '<small>não se aplica hoje</small>' : ''}${av ? `<small class="aviso2">${av}</small>` : ''}</span>`;
   // cada toque passa para o próximo: vazio → feito → não feito → não se aplica → vazio
   b.onclick = () => {
     const r = dia(atual), v = r.h[h.id];
@@ -450,6 +458,44 @@ function travarNavegacao(sim) {
 const tipoAudio = () => ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/ogg', 'audio/webm']
   .find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
 
+// Mostra o som que chega do microfone (barras que sobem com a voz) e avisa quando fica mudo,
+// para perceber na hora se o fone de ouvido não está mandando o som. Devolve a função que desliga.
+function medidorDeSom(fluxo, onda, aviso) {
+  let ctx;
+  try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return () => {}; }
+  const an = ctx.createAnalyser(); an.fftSize = 1024;
+  ctx.createMediaStreamSource(fluxo).connect(an);
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  const buf = new Float32Array(an.fftSize);
+  const N = 34;
+  onda.innerHTML = '<i></i>'.repeat(N); onda.hidden = false;
+  const barras = [...onda.children], niveis = Array(N).fill(0);
+  const nome = (fluxo.getAudioTracks()[0] || {}).label || '';
+  let vivo = true, ultimo = 0, somEm = Date.now(), ouviu = false;
+  const passo = (t) => {
+    if (!vivo) return;
+    requestAnimationFrame(passo);
+    if (t - ultimo < 80) return;
+    ultimo = t;
+    an.getFloatTimeDomainData(buf);
+    let soma = 0; for (const v of buf) soma += v * v;
+    const n = Math.min(1, Math.sqrt(Math.sqrt(soma / buf.length)) * 4);   // raiz: voz baixa também aparece
+    niveis.shift(); niveis.push(n);
+    barras.forEach((b, i) => { b.style.height = Math.max(10, niveis[i] * 100) + '%'; b.classList.toggle('quieta', niveis[i] < 0.12); });
+    if (n >= 0.12) { somEm = Date.now(); ouviu = true; }
+    if (!aviso) return;
+    const mudo = Date.now() - somEm > 4000;
+    aviso.hidden = !mudo;
+    if (mudo) aviso.textContent = ouviu
+      ? 'Silêncio há alguns segundos. Se você está falando, o microfone parou de ouvir: pare e grave de novo.'
+      : `Não está chegando som${nome ? ` do microfone "${nome}"` : ''}. Com fone Bluetooth, tente tirar o fone e gravar pelo celular.`;
+  };
+  requestAnimationFrame(passo);
+  return () => { vivo = false; onda.hidden = true; if (aviso) aviso.hidden = true; ctx.close().catch(() => {}); };
+}
+window.medidorDeSom = medidorDeSom;
+let pararMedidor = () => {};
+
 async function comecarGravacao() {
   let fluxo;
   try { fluxo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
@@ -459,12 +505,14 @@ async function comecarGravacao() {
   pedacos = [];
   gravador.ondataavailable = (e) => { if (e.data.size) pedacos.push(e.data); };
   gravador.onstop = () => {
+    pararMedidor();
     fluxo.getTracks().forEach((t) => t.stop());
     clearInterval(relogio);
     ultimoAudio = new Blob(pedacos, { type: gravador.mimeType || tipo || 'audio/webm' });
     transcrever(ultimoAudio);
   };
   gravador.start();
+  pararMedidor = medidorDeSom(fluxo, $('ent-onda'), $('ent-mudo'));
   travarNavegacao(true);
   const inicio = Date.now();
   $('ent-gravar').setAttribute('aria-pressed', 'true');
@@ -650,7 +698,7 @@ function renderCartaoEntrevista(reg) {
   const e = reg.entrevista;
   const n = e ? e.respostas.filter(Boolean).length : 0;
   $('ent-hoje-status').textContent = n ? `feita · ${n} de ${ENTREVISTAS.dia.length} temas` : 'ainda não';
-  $('ent-hoje-btn').textContent = n ? 'Rever ou completar a entrevista' : 'Fazer a entrevista do dia';
+  $('ent-hoje-btn').innerHTML = n ? 'Rever ou completar a entrevista' : `${ICONE_MIC_18}Fazer a entrevista`;
   $('ent-hoje-btn').className = n ? 'botao contorno grande' : 'botao violeta grande';
   if (window.aoMudarEntrevista) window.aoMudarEntrevista();
 }
@@ -681,7 +729,8 @@ function renderMes() {
   $('mes-ant').disabled = ano < primeiro.getFullYear() || (ano === primeiro.getFullYear() && m <= primeiro.getMonth());
   const ks = diasDoMes();
   const ps = HABITOS.map((h) => pctHabito(h, ks)).filter((p) => p !== null);
-  $('mes-sub').textContent = ps.length ? `constância média: ${Math.round(ps.reduce((a, b) => a + b, 0) / ps.length)}%` : '';
+  const hj = deChave(hoje());
+  $('mes-sub').textContent = ano === hj.getFullYear() && m === hj.getMonth() ? `até hoje, dia ${hj.getDate()}` : ps.length ? '' : 'nada registrado';
   $('vis-plano').setAttribute('aria-pressed', String(visao === 'plano'));
   $('mes-plano').hidden = visao !== 'plano';
   $('vis-tweets').setAttribute('aria-pressed', String(visao === 'tweets'));
@@ -714,8 +763,8 @@ function renderTweets(ks) {
 }
 
 // panorama: uma linha por hábito (nome, um quadradinho por dia, % à direita)
+// O botão de ampliar saiu no redesenho: as barras do mês inteiro já são fáceis de ler.
 let zoomPan = false;
-try { zoomPan = localStorage.getItem('jj-pan-zoom') === '1'; } catch (e) { /* padrão */ }
 function renderPanorama(ksMes) {
   // ampliado: só os dias que já passaram (e desde o início do tracker), com quadrados maiores
   const passados = ksMes.filter((k) => k >= INICIO && k <= hoje());
@@ -733,20 +782,20 @@ function renderPanorama(ksMes) {
       else cls = estado(h, k) || 'vazio';
       return `<i class="${cls}${k === hoje() ? ' hoje' : ''}"></i>`;
     }).join('');
-    return { h, p, html: `<div class="pan-h"><span class="pan-nome">${h.curto}</span><div class="faixa" style="grid-template-columns:${cols}">${celulas}</div><b class="pan-pct${p !== null && p < 50 ? ' fraco' : ''}">${p === null ? '–' : p + '%'}</b></div>` };
+    return { h, p, html: `<div class="pan-h"><span class="pan-nome">${h.curto}</span><div class="faixa">${celulas}</div><b class="pan-pct${p !== null && p < 65 ? ' fraco' : ''}">${p === null ? '–' : p + '%'}</b></div>` };
   });
-  const todoDia = n <= 16;
-  const regua = ks.map((k, i) => { const d = deChave(k).getDate(); return `<span>${todoDia || i === 0 || d % 5 === 0 ? d : ''}</span>`; }).join('');
+  const ultimo = deChave(ks[ks.length - 1]).getDate();
   $('pan-habitos').innerHTML = linhas.map((l) => l.html).join('') +
-    `<div class="pan-h pan-regua"><span></span><div class="reguas" style="grid-template-columns:${cols}">${regua}</div><span></span></div>`;
+    `<div class="pan-h pan-regua"><span></span><div class="reguas"><span>1</span><span>10</span><span>20</span><span>${ultimo}</span></div><span></span></div>`;
 
   const comP = linhas.filter((l) => l.p !== null);
   if (!comP.length) { $('pan-media').textContent = '–'; $('pan-frase').textContent = 'Ainda não há dias registrados neste mês.'; return; }
   const media = Math.round(comP.reduce((a, l) => a + l.p, 0) / comP.length);
   const ord = comP.slice().sort((a, b) => b.p - a.p);
   $('pan-media').textContent = media + '%';
-  $('pan-frase').textContent = ord.length > 1
-    ? `Mais firme: ${ord[0].h.nome} (${ord[0].p}%). O que mais escapou: ${ord[ord.length - 1].h.nome} (${ord[ord.length - 1].p}%).`
+  const ult = ord[ord.length - 1];
+  $('pan-frase').innerHTML = ord.length > 1
+    ? `<span><b class="firme">Mais firme</b> · ${esc(ord[0].h.curto)}, ${ord[0].p}%</span><span><b class="escapou">Mais escapou</b> · ${esc(ult.h.curto)}, ${ult.p}%</span>`
     : '';
 }
 $('pan-zoom').onclick = () => { zoomPan = !zoomPan; try { localStorage.setItem('jj-pan-zoom', zoomPan ? '1' : '0'); } catch (e) {} renderMes(); };

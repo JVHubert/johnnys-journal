@@ -20,26 +20,26 @@
         <div class="capa-topo">
           <div>
             <small id="ini-data" class="capa-data"></small>
-            <h1 id="ini-frase">2026 é autenticidade.</h1>
+            <h1 id="ini-frase">2026 é <i>autenticidade.</i></h1>
           </div>
           <button class="icone-redondo" id="ini-ajustes" aria-label="Ajustes"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
         </div>
+        <div class="ano-topo"><span>O ano</span><b id="ini-ano-pct"></b></div>
         <div class="ano" id="ini-ano"></div>
+        <div id="ini-contadores-box">
+          <div class="carrossel" id="ini-contadores"></div>
+          <div class="pontos" id="ini-pontos"></div>
+        </div>
       </header>
 
-      <div id="ini-contadores-box">
-        <div class="carrossel" id="ini-contadores"></div>
-        <div class="pontos" id="ini-pontos"></div>
-      </div>
-
       <section class="card" id="ini-hoje-box">
-        <div class="card-topo"><h2 class="secao">Hoje</h2><button class="link" id="ini-ver-tudo">Ver tudo ›</button></div>
+        <div class="card-topo"><h2 class="titulo-card">Hoje <small id="ini-hoje-n"></small></h2><button class="link" id="ini-ver-tudo">Ver tudo ›</button></div>
         <div id="ini-hoje"></div>
       </section>
 
       <section id="ini-habitos-box">
         <h2 class="secao">Hábitos que faltam</h2>
-        <div class="faixa-rola" id="ini-habitos"></div>
+        <div class="chips-habito" id="ini-habitos"></div>
       </section>
 
       <section id="ini-neste-box" hidden>
@@ -67,7 +67,7 @@
         <b>Falta ligar ao Journal do PC</b>
         <p class="meta">Ligue o backup em Ajustes (engrenagem da Início): a ligação vem junto, sozinha.</p>
       </div>
-      <button class="fab violeta fab-cima" id="tar-ditar" aria-label="Ditar tarefa"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      <button class="fab violeta fab-cima" id="tar-ditar" aria-label="Ditar tarefa"><svg viewBox="0 0 24 24" width="26" height="26"><rect x="5" y="15" width="14" height="6" rx="2" fill="currentColor" opacity=".7"/><rect x="8" y="2.5" width="8" height="14" rx="4" fill="currentColor"/></svg></button>
       <button class="fab menta" id="tar-nova" aria-label="Nova tarefa">+</button>
     </section>
 
@@ -89,7 +89,7 @@
           <button class="icone" id="dia-prox" aria-label="Próximo dia">›</button>
         </header>
 
-        <div id="pm3-card" class="card pm3">
+        <div id="pm3-card" class="card pm3" hidden>
           <div class="linha-base"><span>PM3 até 01/11</span><b id="pm3-pct"></b></div>
           <div class="barra"><i id="pm3-barra"></i></div>
           <small id="pm3-txt" class="meta"></small>
@@ -123,12 +123,11 @@
           <button class="icone" id="mes-prox" aria-label="Próximo mês">›</button>
         </header>
         <div id="mes-panorama">
-          <div class="capa resumo" id="pan-resumo">
+          <div class="resumo" id="pan-resumo">
             <b id="pan-media"></b>
-            <span>constância média do mês</span>
             <p id="pan-frase"></p>
           </div>
-          <button class="link pan-zoom" id="pan-zoom">Ampliar os dias que já passaram</button>
+          <button class="link pan-zoom" id="pan-zoom" hidden>Ampliar os dias que já passaram</button>
           <div id="pan-habitos"></div>
           <p class="meta legenda"><span><i class="c ok"></i>feito</span> <span><i class="c parcial"></i>em parte</span> <span><i class="c x"></i>não feito</span> <span><i class="c na"></i>não se aplica</span> <span><i class="c vazio"></i>sem marcação</span></p>
         </div>
@@ -185,6 +184,8 @@
         <ul id="ent-perguntas" class="perguntas"></ul>
         <textarea id="ent-resposta" rows="7" placeholder="Toque em Gravar, ou no microfone do teclado."></textarea>
         <button class="falar" id="ent-gravar" aria-pressed="false" hidden><span class="ponto"></span><span id="ent-gravar-txt">Gravar</span></button>
+        <div class="onda mini" id="ent-onda" aria-hidden="true" hidden></div>
+        <p class="aviso-mudo" id="ent-mudo" role="alert" hidden></p>
         <button class="falar" id="ent-falar" aria-pressed="false"><span class="ponto"></span><span id="ent-falar-txt">Falar</span></button>
         <p id="ent-dica" class="meta"></p>
         <div class="ent-botoes">
