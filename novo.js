@@ -425,7 +425,7 @@ function escolherProjeto(atualP, aoEscolher) {
 async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
   let fluxo;
   try { fluxo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch (err) { avisar('Permita o microfone para o app (cadeado na barra de endereço do Firefox).'); return; }
+  catch (err) { avisar('Microfone bloqueado. Segure o ícone do Journal na tela inicial › Informações do app › Permissões › Microfone › Permitir.'); return; }
   const tipo = tipoAudio();
   const rec = new MediaRecorder(fluxo, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : undefined);
   const pedacos = [];
@@ -763,7 +763,7 @@ function ditarNaNota(el, texto) {
   const fechar = () => { clearInterval(relogio); desligar(); fluxo && fluxo.getTracks().forEach((x) => x.stop()); painel.hidden = true; ferr.hidden = false; };
   (async () => {
     try { fluxo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-    catch (err) { avisar('Permita o microfone para o app (cadeado na barra de endereço do Firefox).'); return; }
+    catch (err) { avisar('Microfone bloqueado. Segure o ícone do Journal na tela inicial › Informações do app › Permissões › Microfone › Permitir.'); return; }
     if (cancelado) { fluxo.getTracks().forEach((x) => x.stop()); return; }
     const tipo = tipoAudio();
     rec = new MediaRecorder(fluxo, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : undefined);
@@ -1086,7 +1086,7 @@ function abrirPedidoAvisos() {
   el.querySelector('[data-a="nao"]').onclick = fecharCamada;
   el.querySelector('[data-a="sim"]').onclick = async () => {
     try { await inscreverAvisos(); fecharCamada(); avisar('Avisos ligados.'); if (telaAtual === 'ajustes') renderAjustes(); }
-    catch (err) { avisar(err.message === 'negado' ? 'O Firefox bloqueou os avisos. Libere em Configurações do site (cadeado).' : 'Não consegui ligar: ' + err.message); }
+    catch (err) { avisar(err.message === 'negado' ? 'Os avisos estão bloqueados. Segure o ícone do Journal na tela inicial › Informações do app › Notificações › ligar.' : 'Não consegui ligar: ' + err.message); }
   };
   abrirFolha(el);
 }

@@ -499,7 +499,7 @@ let pararMedidor = () => {};
 async function comecarGravacao() {
   let fluxo;
   try { fluxo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch (e) { avisar('Permita o microfone para o app (cadeado na barra de endereço do Firefox).'); return; }
+  catch (e) { avisar('Microfone bloqueado. Segure o ícone do Journal na tela inicial › Informações do app › Permissões › Microfone › Permitir.'); return; }
   const tipo = tipoAudio();
   gravador = new MediaRecorder(fluxo, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : undefined);
   pedacos = [];
