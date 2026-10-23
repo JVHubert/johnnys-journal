@@ -1162,6 +1162,8 @@ function seguirEndereco(hash) {
 }
 navigator.serviceWorker?.addEventListener('message', (ev) => { if (ev.data && ev.data.abrir) seguirEndereco(ev.data.abrir); });
 
+// Tweet do dia pelo serviço do Journal (Gemini); o app.js chama ao fim da entrevista.
+window.tweetPelaNuvem = async (texto) => (await nuvem('/tweet', { texto })).tweet || null;
 window.renderNovo = () => { renderInicio(); renderTarefas(); renderJournal(); };
 window.aoSincronizar = async () => {
   const antes = ligacao;

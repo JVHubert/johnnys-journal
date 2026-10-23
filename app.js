@@ -619,8 +619,14 @@ async function modeloTexto(k) {
   try { localStorage.setItem('jj-groq-modelo', JSON.stringify({ id, t: Date.now() })); } catch (e) { /* segue */ }
   return id;
 }
+// O tweet sai do serviço do Journal na nuvem (Gemini 3.5 Flash, escolha do JV em 23/10); se ele falhar,
+// o Groq direto daqui, como antes.
 async function tweetComGroq(e) {
-  const k = chaveGroq(), base = textoBase(e);
+  const base = textoBase(e);
+  if (base && window.tweetPelaNuvem) {
+    try { const t = await window.tweetPelaNuvem(base); if (t) return t; } catch (err) { /* cai para o Groq */ }
+  }
+  const k = chaveGroq();
   if (!k || !base) return null;
   const modelo = await modeloTexto(k);
   if (!modelo) return null;
