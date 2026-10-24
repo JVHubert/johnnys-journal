@@ -43,6 +43,16 @@ const ent = (txt) => ({ modo: 'dia', data: '2026-10-20', respostas: [txt, '', ''
   const r2 = JJ.juntarDia({ t: 500, tc: { entrevista: 500 }, h: {} }, { t: 400, tc: { entrevista: 400 }, h: {}, entrevista: ent('dia bom') })
   ok(r2.entrevista && r2.entrevista.respostas[0] === 'dia bom', '5. entrevista sumida mais nova não apaga a que tem texto')
 }
+// 5b. Entrevista movida de dia de propósito: a vazia com movidaPara vence, nos dois sentidos.
+{
+  const movida = { modo: 'dia', data: '2026-10-20', respostas: [], movidaPara: '2026-10-19' }
+  const r = JJ.juntarDia({ t: 500, tc: { entrevista: 500 }, h: {}, entrevista: movida }, { t: 400, tc: { entrevista: 400 }, h: {}, entrevista: ent('dia bom') })
+  ok(r.entrevista.movidaPara === '2026-10-19', '5b. a mudança de dia feita no celular vence a cópia velha do GitHub')
+  const r2 = JJ.juntarDia({ t: 400, tc: { entrevista: 400 }, h: {}, entrevista: ent('dia bom') }, { t: 500, tc: { entrevista: 500 }, h: {}, entrevista: movida })
+  ok(r2.entrevista.movidaPara === '2026-10-19', '5b. um celular com a cópia velha também aceita a mudança de dia')
+  const r3 = JJ.juntarDia({ t: 600, tc: { entrevista: 600 }, h: {}, entrevista: ent('refiz') }, { t: 500, tc: { entrevista: 500 }, h: {}, entrevista: movida })
+  ok(r3.entrevista.respostas[0] === 'refiz', '5b. entrevista nova feita depois no mesmo dia vale')
+}
 // 6. carimbar: só os campos que mudaram ganham carimbo novo.
 {
   const antes = { '2026-10-20': { t: 1, h: { a: true }, agua: 1, tweet: 'x' } }

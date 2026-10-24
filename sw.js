@@ -1,7 +1,9 @@
 // Guarda os arquivos no aparelho para o app abrir sem internet.
 // Aumente a versão a cada publicação para os celulares baixarem a nova.
-const VERSAO = 'journal-v27';
+// Desde a 2.32.0 o celular e o PC têm o MESMO número de versão (é um app só): suba os dois juntos.
+const VERSAO = '2.32.0';
 const PUBLICADA = '2026-10-24'; // mude junto com a VERSAO: aparece em Ajustes
+const CACHE = 'journal-' + VERSAO;
 const ARQUIVOS = [
   './',
   'index.html',
@@ -20,7 +22,7 @@ const ARQUIVOS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSAO).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
 });
 
 // Ajustes pergunta qual versão está rodando neste celular.
@@ -31,7 +33,7 @@ self.addEventListener('message', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSAO).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -42,7 +44,7 @@ self.addEventListener('fetch', (e) => {
   // o plano muda toda semana: busca na rede primeiro e usa a cópia guardada só sem internet
   if (e.request.url.includes('plano.enc.json')) {
     e.respondWith(
-      fetch(e.request).then((r) => { const c = r.clone(); caches.open(VERSAO).then((k) => k.put('plano.enc.json', c)); return r; })
+      fetch(e.request).then((r) => { const c = r.clone(); caches.open(CACHE).then((k) => k.put('plano.enc.json', c)); return r; })
         .catch(() => caches.match('plano.enc.json')),
     );
     return;

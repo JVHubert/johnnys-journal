@@ -658,11 +658,12 @@ function abrirItem(it) {
   const hora = it.nota && it.nota.criada ? new Date(it.nota.criada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
   const quando = d ? d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== deChave(hoje()).getFullYear() ? { year: 'numeric' } : {}) }).replace('-feira', '') : '';
   const ehNota = it.tipo === 'nota';
+  const ehEntDia = it.tipo === 'entrevista' && !!it.dia && !it.memoria;
   const el = h(`<article class="nota-aberta">
     <div class="na-barra">
       <button class="icone-b" data-a="voltar" aria-label="Voltar">‹</button><span></span>
       <button class="icone-b apagado" data-a="editar" aria-label="Editar">✎</button>
-      ${ehNota ? '<button class="icone-b apagado" data-a="mais" aria-label="Mais opções">⋯</button>' : ''}
+      ${ehNota || ehEntDia ? '<button class="icone-b apagado" data-a="mais" aria-label="Mais opções">⋯</button>' : ''}
     </div>
     ${it.foto ? '<div class="na-foto"><img alt=""></div>' : ''}
     <div class="na-corpo">
@@ -693,7 +694,12 @@ function abrirItem(it) {
   const fotoB = el.querySelector('[data-a="foto"]');
   if (fotoB) fotoB.onclick = () => escolherFoto('galeria', async (blob) => { await guardarFotoDaNota(it.nota, blob); fecharCamada(); renderJournal(); });
   const maisB = el.querySelector('[data-a="mais"]');
-  if (maisB) maisB.onclick = () => {
+  if (maisB && ehEntDia) maisB.onclick = () => {
+    const menu = h('<div class="menu-folha"><button data-a="mudar-dia">Mudar o dia desta entrevista</button></div>');
+    menu.querySelector('[data-a="mudar-dia"]').onclick = async () => { await fecharCamada(); await fecharCamada(); escolherNovoDia(it.dia); };
+    abrirFolha(menu);
+  };
+  else if (maisB) maisB.onclick = () => {
     const menu = h('<div class="menu-folha"><button class="coral" data-a="apagar">Apagar nota</button></div>');
     menu.querySelector('[data-a="apagar"]').onclick = async () => {
       const n = it.nota;
@@ -704,6 +710,43 @@ function abrirItem(it) {
     abrirFolha(menu);
   };
   abrirCheia(el);
+}
+
+// ---------- entrevista no dia errado: muda de dia ----------
+// O dia de origem fica com uma entrevista vazia marcada `movidaPara` (juntar.js respeita a marca),
+// senão a cópia do backup traria a entrevista de volta.
+const temTexto = (x) => !!(x && (x.respostas || []).some((r) => r && String(r).trim()));
+function escolherNovoDia(de) {
+  const el = h(`<div class="menu-folha escolher-dia">
+    <p class="folha-pergunta">Para qual dia vai esta entrevista?</p>
+    <input class="campo" type="date" id="md-dia" value="${somaDias(de, -1)}" max="${hoje()}">
+    <p class="meta" id="md-aviso"></p>
+    <button class="botao menta grande" id="md-ok">Mover</button>
+  </div>`);
+  const campo = el.querySelector('#md-dia'), aviso = el.querySelector('#md-aviso'), okB = el.querySelector('#md-ok');
+  const conferir = () => {
+    const para = campo.value;
+    okB.disabled = !para || para === de;
+    const ja = para && lerDia(para).entrevista;
+    aviso.textContent = temTexto(ja) ? `O dia ${diaCurto(para)} já tem uma entrevista: ela será trocada por esta.` : '';
+    okB.textContent = temTexto(ja) ? 'Trocar e mover' : 'Mover';
+  };
+  campo.oninput = conferir; conferir();
+  okB.onclick = () => fecharCamada().then(() => {
+    const para = campo.value;
+    const original = lerDia(de).entrevista;
+    const antiga = lerDia(para).entrevista;
+    dia(para).entrevista = { ...original, data: para, t: Date.now() };
+    dia(para).h.journal = true;
+    dia(de).entrevista = { modo: original.modo, data: de, respostas: [], movidaPara: para, t: Date.now() };
+    salvar(); renderTudo(); renderJournal(); renderInicio();
+    lanche(`Entrevista movida para ${diaCurto(para)}`, () => {
+      dia(de).entrevista = { ...original, t: Date.now() };
+      if (antiga) dia(para).entrevista = { ...antiga, t: Date.now() }; else delete dia(para).entrevista;
+      salvar(); renderTudo(); renderJournal(); renderInicio();
+    });
+  });
+  abrirFolha(el);
 }
 
 // ---------- notas: criar, editar, foto ----------

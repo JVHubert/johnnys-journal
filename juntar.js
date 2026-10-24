@@ -5,7 +5,8 @@
 // hábito, "agua", "pm3", "tweet", "entrevista", "ilustracao"…). Em cada campo vence o carimbo mais novo,
 // então marcar um hábito no PC não apaga uma entrevista que o celular ainda não tinha enviado.
 // Dia antigo sem `tc`: o campo que existe vale o carimbo do dia (t); o campo que não existe vale 0.
-// Entrevista com respostas nunca é trocada por uma vazia ou sumida.
+// Entrevista com respostas nunca é trocada por uma vazia ou sumida, a não ser que a vazia diga
+// `movidaPara` (o JV mudou a entrevista de dia de propósito, desde a 2.32.0).
 (function (raiz) {
   const FIXAS = ['t', 'tc'];
 
@@ -46,7 +47,8 @@
       let vence = ca >= cb ? a : b;
       if (c === 'entrevista') {
         const outro = vence === a ? b : a;
-        if (!temConteudo(ler(vence, c)) && temConteudo(ler(outro, c))) vence = outro;
+        const v = ler(vence, c);
+        if (!temConteudo(v) && !(v && v.movidaPara) && temConteudo(ler(outro, c))) vence = outro;
       }
       r.tc[c] = Math.max(ca, cb);
       const v = ler(vence, c);
