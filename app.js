@@ -463,6 +463,7 @@ $('groq-trocar').onclick = () => { try { localStorage.removeItem(GROQ_CHAVE); } 
 function travarNavegacao(sim) {
   ocupado = sim;
   $('ent-prox').disabled = sim; $('ent-voltar').disabled = sim || (ent && ent.passo === 0); $('ent-sair').disabled = sim;
+  $('ent-encerrar').disabled = sim;
 }
 const tipoAudio = () => ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/ogg', 'audio/webm']
   .find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
@@ -590,6 +591,12 @@ $('ent-prox').onclick = () => {
   if (ent.modo === 'dia') concluirDia(); else concluirMemoria();
 };
 $('ent-sair').onclick = () => { guardarResposta(); voltarInicioEnt(); };
+// Encerrar: guarda a resposta aberta e termina como o "Terminar" da última pergunta, sem passar pelas outras.
+$('ent-encerrar').onclick = () => {
+  if (!ent) return;
+  guardarResposta();
+  if (ent.modo === 'dia') concluirDia(); else concluirMemoria();
+};
 $('ent-compartilhar').onclick = () => { if (memoriaFeita) enviar(textoParaClaude(memoriaFeita)); };
 $('ent-nova').onclick = voltarInicioEnt;
 function voltarInicioEnt() {
