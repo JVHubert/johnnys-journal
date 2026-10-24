@@ -410,6 +410,8 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 
 @media print { body { background: #fff; color: #000; } .barra, .fab { display: none; } }
 
+.versao-app { color: var(--sec); font-size: 13px; text-align: center; margin: 28px 0 8px; }
+
 /* ---------- ilustração do dia ---------- */
 .ilustra { min-height: 100%; display: flex; flex-direction: column; }
 .il-corpo { padding: 0 16px 28px; }

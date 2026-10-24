@@ -1159,6 +1159,7 @@ async function renderAjustes() {
   [['contadores', 'Contadores'], ['lua', 'Fase da Lua'], ['hoje', 'Tarefas de hoje'], ['habitos', 'Hábitos que faltam'], ['neste', 'Neste dia'], ['entrevista', 'Atalho da entrevista']]
     .forEach(([k, r]) => ini.appendChild(chave2(r, prefs[k], (v) => { prefs[k] = v; gravarLS('jj-inicio', prefs); renderInicio(); })));
   renderAjContadores();
+  mostrarVersao();
   $('aj-ligacao').textContent = DEMO ? '' : ligacao ? 'Ligado ao Journal do PC: as tarefas vão e voltam.' : token() ? 'Procurando a ligação com o PC…' : '';
   // avisos (os horários ficam no serviço, que é quem manda)
   const av = $('aj-avisos');
@@ -1196,6 +1197,19 @@ function renderAjContadores() {
   const f = h(`<form class="novo-contador"><input class="campo" name="nome" placeholder="Ex.: Casa nova" required><input class="campo" type="date" name="data" required><button class="botao menta">Adicionar</button></form>`);
   f.onsubmit = (ev) => { ev.preventDefault(); const nome = f.nome.value.trim(), data = f.data.value; if (nome && data) gravar([...lista, { id: novoId(), nome, data }]); };
   box.appendChild(f);
+}
+
+// Versão do app que está rodando neste celular (vem do sw.js), no pé dos Ajustes.
+function mostrarVersao() {
+  const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+  const escrever = (v) => {
+    const [a, m, d] = String(v.publicada || '').split('-');
+    $('aj-versao').textContent = `Versão do app: ${v.versao}${d ? ` · publicada em ${d}/${m}/${a}` : ''}`;
+  };
+  if (!sw) { $('aj-versao').textContent = 'Versão do app: sem a cópia offline neste aparelho'; return; }
+  const canal = new MessageChannel();
+  canal.port1.onmessage = (ev) => escrever(ev.data || {});
+  sw.postMessage('versao', [canal.port2]);
 }
 
 // ================= AVISOS =================

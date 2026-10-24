@@ -1,6 +1,7 @@
 // Guarda os arquivos no aparelho para o app abrir sem internet.
 // Aumente a versão a cada publicação para os celulares baixarem a nova.
-const VERSAO = 'journal-v23';
+const VERSAO = 'journal-v24';
+const PUBLICADA = '2026-10-23'; // mude junto com a VERSAO: aparece em Ajustes
 const ARQUIVOS = [
   './',
   'index.html',
@@ -19,6 +20,11 @@ const ARQUIVOS = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSAO).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
+});
+
+// Ajustes pergunta qual versão está rodando neste celular.
+self.addEventListener('message', (e) => {
+  if (e.data === 'versao' && e.ports[0]) e.ports[0].postMessage({ versao: VERSAO, publicada: PUBLICADA });
 });
 
 self.addEventListener('activate', (e) => {
