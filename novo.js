@@ -246,6 +246,11 @@ function renderTarefas() {
     if (hj.length) hj.forEach((t) => lista.appendChild(linhaTarefa(t)));
     else lista.appendChild(vazio(atr.length ? 'Nada marcado para hoje além das atrasadas.' : 'Nada para hoje. Toque em + para anotar.'));
   } else if (vista === 'proximos') {
+    // Começa por hoje (as atrasadas ficam na aba Hoje) e depois os 7 dias seguintes.
+    lista.appendChild(secao('Hoje · ' + diaCurto(k)));
+    const hojeM = abertas.filter((t) => t.data === k).sort(ordenar);
+    if (hojeM.length) hojeM.forEach((t) => lista.appendChild(linhaTarefa(t)));
+    else lista.appendChild(h('<p class="nada">Nada marcado</p>'));
     for (let i = 1; i <= 7; i++) {
       const d = somaDias(k, i);
       lista.appendChild(secao(i === 1 ? 'Amanhã · ' + diaCurto(d) : diaCurto(d)));
@@ -308,7 +313,7 @@ function abrirDetalhe(id) {
   const el = h(`<div class="detalhe">
     <div class="det-topo"><textarea class="det-titulo" rows="1" aria-label="Título">${e(t.titulo)}</textarea>
       <button class="estrela-botao${t.importante ? ' ligada' : ''}" aria-label="Importante" aria-pressed="${!!t.importante}">★</button></div>
-    <label class="det-linha"><span>Data</span><input type="date" data-c="data" value="${e(t.data || '')}"></label>
+    <div class="det-linha"><span>Data</span><input type="date" data-c="data" aria-label="Data" value="${e(t.data || '')}"><button type="button" class="link apagado det-sem-data" id="det-sem-data">Sem data</button></div>
     <label class="det-linha"><span>Hora</span><input type="time" data-c="hora" value="${e(t.hora || '')}"></label>
     <label class="det-linha"><span>Repetir</span><select data-c="repetir">${REPETIR.map(([v, r]) => `<option value="${v}"${v === rep ? ' selected' : ''}>${r}</option>`).join('')}${rep === 'outro' ? `<option value="outro" selected>${e(rotuloRepetir(t.repetir))}</option>` : ''}</select></label>
     <label class="det-linha"><span>Lembrete</span><input type="datetime-local" data-c="lembrete" value="${e(t.lembrete || '')}"></label>
@@ -342,6 +347,13 @@ function abrirDetalhe(id) {
     });
     if ((c.dataset.c === 'hora' || c.dataset.c === 'lembrete') && v) talvezPedirAvisos(T.lista[id]);
   }));
+  // Tira a data e a hora de uma vez (vai para o PC como as outras mudanças).
+  el.querySelector('#det-sem-data').onclick = () => {
+    mudarTarefa(id, (x) => { x.data = null; x.hora = null; });
+    el.querySelector('[data-c="data"]').value = '';
+    el.querySelector('[data-c="hora"]').value = '';
+    avisar('Tarefa sem data.');
+  };
   el.querySelector('#det-apagar').onclick = () => fecharCamada().then(() => apagarTarefa(id));
   abrirFolha(el);
 }
