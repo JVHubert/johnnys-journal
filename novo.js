@@ -736,12 +736,15 @@ function escolherNovoDia(de) {
     const para = campo.value;
     const original = lerDia(de).entrevista;
     const antiga = lerDia(para).entrevista;
-    dia(para).entrevista = { ...original, data: para, t: Date.now() };
+    dia(para).entrevista = { ...original, respostas: [...original.respostas], data: para, t: Date.now() };
     dia(para).h.journal = true;
     dia(de).entrevista = { modo: original.modo, data: de, respostas: [], movidaPara: para, t: Date.now() };
+    // Entrevista desse dia ainda aberta na tela (bug de 24/10): o que for gravado nela vai para o dia novo.
+    if (ent && ent.modo === 'dia' && ent.data === de) ent = { ...ent, data: para, respostas: [...original.respostas] };
     salvar(); renderTudo(); renderJournal(); renderInicio();
     lanche(`Entrevista movida para ${diaCurto(para)}`, () => {
-      dia(de).entrevista = { ...original, t: Date.now() };
+      dia(de).entrevista = { ...original, respostas: [...original.respostas], t: Date.now() };
+      if (ent && ent.modo === 'dia' && ent.data === para) ent = { ...ent, data: de };
       if (antiga) dia(para).entrevista = { ...antiga, t: Date.now() }; else delete dia(para).entrevista;
       salvar(); renderTudo(); renderJournal(); renderInicio();
     });

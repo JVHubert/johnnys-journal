@@ -314,7 +314,8 @@ function mostrarEnt(qual) {
 function iniciarEnt(modo, titulo) {
   const k = atual;
   const ja = modo === 'dia' ? lerDia(k).entrevista : null;
-  ent = ja ? { ...ja, passo: 0 } : { modo, titulo, data: k, passo: 0, respostas: [] };
+  // Cópia da lista de respostas: a entrevista aberta nunca divide a lista com a que está guardada no dia.
+  ent = ja ? { ...ja, respostas: [...(ja.respostas || [])], passo: 0 } : { modo, titulo, data: k, passo: 0, respostas: [] };
   mostrarEnt('ent-passo');
   renderPasso();
 }
@@ -346,7 +347,7 @@ function guardarResposta() {
 }
 
 function persistirEnt() {
-  const copia = { modo: ent.modo, titulo: ent.titulo, data: ent.data, respostas: ent.respostas, t: Date.now() };
+  const copia = { modo: ent.modo, titulo: ent.titulo, data: ent.data, respostas: [...ent.respostas], t: Date.now() };
   if (ent.modo === 'dia') {
     const r = dia(ent.data);
     r.entrevista = copia;
@@ -385,7 +386,7 @@ function renderGuardadas() {
     const c = document.createElement('button'); c.className = 'link'; c.textContent = 'Abrir';
     c.onclick = () => {
       if (e.modo === 'dia') { iniciarEnt('dia'); return; }
-      ent = { ...e, passo: 0 }; mostrarEnt('ent-passo'); renderPasso();
+      ent = { ...e, respostas: [...(e.respostas || [])], passo: 0 }; mostrarEnt('ent-passo'); renderPasso();
     };
     row.appendChild(c); box.appendChild(row);
   });
