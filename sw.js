@@ -1,12 +1,13 @@
 // Guarda os arquivos no aparelho para o app abrir sem internet.
 // Aumente a versão a cada publicação para os celulares baixarem a nova.
-const VERSAO = 'journal-v24';
-const PUBLICADA = '2026-10-23'; // mude junto com a VERSAO: aparece em Ajustes
+const VERSAO = 'journal-v25';
+const PUBLICADA = '2026-10-24'; // mude junto com a VERSAO: aparece em Ajustes
 const ARQUIVOS = [
   './',
   'index.html',
   'style.css',
   'app.js',
+  'juntar.js',
   'novo.js',
   'datas.js',
   'astro.js',

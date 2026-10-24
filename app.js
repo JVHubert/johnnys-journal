@@ -77,8 +77,14 @@ if (DEMO) {
     dados.dias[k] = { h: { acordar: s(1), treino: s(2), macros: s(3), semp: s(4), leitura: s(5), celular: s(6), journal: s(7) }, agua: (i * 3) % 5, pm3: i < 15 ? [2, 2.5, 3, 1.5][i % 4] : 0, tweet: frases[i % 5] };
   }
 }
+// Foto dos dias como estavam no último salvar/sincronizar: salvar() carimba só os campos que mudaram (juntar.js).
+const copiaDias = (d) => JSON.parse(JSON.stringify(d || {}));
+let fotoDias = copiaDias(dados.dias);
+function carimbarMudancas() { JJ.carimbar(fotoDias, dados.dias, Date.now()); fotoDias = copiaDias(dados.dias); }
+
 function salvar() {
   if (DEMO) return;
+  carimbarMudancas();
   try { localStorage.setItem(CHAVE, JSON.stringify(dados)); }
   catch (e) { avisar('Não consegui salvar neste navegador.'); }
   agendarSync();
@@ -928,35 +934,8 @@ function agendarSync() {
   syncTimer = setTimeout(sincronizar, 2500);
 }
 
-// junta o que está no celular com o que está no GitHub: em cada dia, vence a versão mais recente
-function juntar(local, remoto) {
-  // Começa com tudo das duas pontas: um campo novo (de outra versão do app ou do Journal do PC) não se perde.
-  const r = { ...remoto, ...local, dias: { ...remoto.dias }, memorias: [], plano: {}, planoT: 0 };
-  for (const [k, d] of Object.entries(local.dias)) if (!r.dias[k] || (d.t || 0) >= (r.dias[k].t || 0)) r.dias[k] = d;
-  const mems = new Map();
-  for (const m of [...(remoto.memorias || []), ...(local.memorias || [])]) {
-    const k = m.titulo + '|' + m.data;
-    if (!mems.has(k) || (m.t || 0) >= (mems.get(k).t || 0)) mems.set(k, m);
-  }
-  r.memorias = [...mems.values()];
-  const pl = (local.planoT || 0) >= (remoto.planoT || 0) ? local : remoto;
-  r.plano = { ...(pl.plano || {}) }; r.planoT = pl.planoT || 0;
-  // sugestões de tweet do Claude: ficam fora dos dias para nunca sobrescrever o que o JV marcou
-  r.sugestoes = { ...(remoto.sugestoes || {}) };
-  for (const [k, s] of Object.entries(local.sugestoes || {})) if (!r.sugestoes[k] || (s.t || 0) >= (r.sugestoes[k].t || 0)) r.sugestoes[k] = s;
-  // caixa: tarefas escritas no celular para o Journal do PC (junta as duas pontas pelo id)
-  // notas escritas no celular (Journal): juntam pelo id, vale a mais nova
-  const notas = new Map();
-  for (const n of [...(remoto.notas || []), ...(local.notas || [])]) if (n && n.id && (!notas.has(n.id) || (n.t || 0) >= (notas.get(n.id).t || 0))) notas.set(n.id, n);
-  if (notas.size) r.notas = [...notas.values()]; else delete r.notas;
-  // contadores pessoais da Início: a lista inteira, vale a mais nova
-  const ct = (local.contadoresT || 0) >= (remoto.contadoresT || 0) ? local : remoto;
-  if (ct.contadores) { r.contadores = ct.contadores; r.contadoresT = ct.contadoresT || 0; }
-  const caixa = new Map();
-  for (const c of [...(remoto.caixa || []), ...(local.caixa || [])]) if (c && c.id && (!caixa.has(c.id) || (c.t || 0) >= (caixa.get(c.id).t || 0))) caixa.set(c.id, c);
-  if (caixa.size) r.caixa = [...caixa.values()]; else delete r.caixa;
-  return r;
-}
+// A junção fica em juntar.js (dias campo a campo, com carimbo por campo).
+const juntar = (local, remoto) => JJ.juntar(local, remoto);
 
 // ================= CAIXA DE ENTRADA DO JOURNAL (PC) =================
 // Tarefa escrita aqui vai em dados.caixa; o Journal do PC lê o backup e cria a tarefa lá (entende datas,
@@ -988,8 +967,9 @@ async function sincronizar() {
       const junto = juntar(dados, remoto);
       const mudouLocal = JSON.stringify(junto) !== JSON.stringify(dados);
       dados = junto;
+      fotoDias = copiaDias(dados.dias);
       try { localStorage.setItem(CHAVE, JSON.stringify(dados)); } catch (e) { /* segue */ }
-      if (aplicarSugestoes()) { try { localStorage.setItem(CHAVE, JSON.stringify(dados)); } catch (e) { /* segue */ } }
+      if (aplicarSugestoes()) { carimbarMudancas(); try { localStorage.setItem(CHAVE, JSON.stringify(dados)); } catch (e) { /* segue */ } }
       if (mudouLocal) renderTudo();
       if (sha && JSON.stringify(junto) === JSON.stringify(remoto)) { ok = true; break; }   // nada novo para enviar
       const p = await fetch(REPO_DADOS, {
