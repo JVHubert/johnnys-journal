@@ -39,7 +39,7 @@ function lanche(txt, desfazer) {
   $('lanche-acao').hidden = !desfazer;
   $('lanche-acao').onclick = () => { box.hidden = true; desfazer && desfazer(); };
   box.hidden = false;
-  clearTimeout(lancheT); lancheT = setTimeout(() => (box.hidden = true), 4000);
+  clearTimeout(lancheT); lancheT = setTimeout(() => (box.hidden = true), 8000);
 }
 
 // ---------- camadas por cima (folha, tela cheia) e o botão Voltar do Android ----------
@@ -184,7 +184,7 @@ function metaTarefa(t) {
   else if (t.hora) partes.push(e(t.hora));
   if (t.repetir) partes.push(`<span title="${e(rotuloRepetir(t.repetir))}">↻</span>`);
   if (t.lembrete) partes.push('<span title="lembrete">⏰</span>');
-  if (t.projeto) partes.push(`<span><b style="color:${corProjeto(t.projeto)}">#</b>${e(t.projeto)}</span>`);
+  if (t.projeto) partes.push(`<span><b style="color:${corProjeto(t.projeto)}">@</b>${e(t.projeto)}</span>`);
   if ((t.origem || '').startsWith('plano:')) partes.push('<span class="selo">Plano</span>');
   return partes.join('<i class="sep">·</i>');
 }
@@ -230,7 +230,7 @@ function renderTarefas() {
     const v = b.dataset.v;
     b.setAttribute('aria-selected', String(v === vista));
     const n = v === 'hoje' ? deHoje.length : v === 'inbox' ? inbox.length : 0;
-    b.innerHTML = `${{ hoje: 'Hoje', proximos: 'Próximos', inbox: 'Inbox', projetos: 'Projetos' }[v]}${n ? ` <small>${n}</small>` : ''}`;
+    b.innerHTML = `${{ hoje: 'Hoje', proximos: 'Próximos', inbox: 'Sem data', projetos: 'Projetos' }[v]}${n ? ` <small>${n}</small>` : ''}`;
   });
   lista.innerHTML = '';
   if (vista === 'hoje') {
@@ -250,7 +250,7 @@ function renderTarefas() {
     }
   } else if (vista === 'inbox') {
     if (inbox.length) inbox.sort(ordenar).forEach((t) => lista.appendChild(linhaTarefa(t)));
-    else lista.appendChild(vazio('Inbox vazio. Tarefa sem data cai aqui.'));
+    else lista.appendChild(vazio('Nenhuma tarefa sem data.'));
   } else if (projetoAberto) {
     renderProjeto(lista, projetoAberto);
   } else {
@@ -371,7 +371,7 @@ function abrirNovaTarefa(pre = {}) {
     if (data) partes.push(rotuloData(data, hoje()).replace(/^./, (c) => c.toUpperCase()) + (hora ? ', ' + hora.replace(/^0/, '') : ''));
     if (r.repetir) partes.push(rotuloRepetir(r.repetir));
     if (ajuste.lembrete) partes.push('⏰ ' + ajuste.lembrete.slice(11));
-    if (proj) partes.push('#' + proj);
+    if (proj) partes.push('@' + proj);
     r.etiquetas.forEach((x) => partes.push('#' + x));
     el.querySelector('#rap-resumo').textContent = partes.join(' · ');
     el.querySelectorAll('#rap-chips button').forEach((b) => {
@@ -467,7 +467,7 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
         salvarB.hidden = false;
         salvarB.onclick = () => { const txt = saida.querySelector('textarea').value; fecharCamada().then(() => aoTexto(txt)); };
       } else {
-        saida.innerHTML = r.tarefas.map((t, i) => `<label class="dit-tarefa"><input type="checkbox" checked data-i="${i}"><span><b>${e(t.titulo)}</b><small>${e([t.data && rotuloData(t.data, hoje()), t.hora, t.projeto && '#' + t.projeto].filter(Boolean).join(' · '))}</small></span></label>`).join('') || `<p>${e(r.texto)}</p>`;
+        saida.innerHTML = r.tarefas.map((t, i) => `<label class="dit-tarefa"><input type="checkbox" checked data-i="${i}"><span><b>${e(t.titulo)}</b><small>${e([t.data && rotuloData(t.data, hoje()), t.hora, t.projeto && '@' + t.projeto].filter(Boolean).join(' · '))}</small></span></label>`).join('') || `<p>${e(r.texto)}</p>`;
         salvarB.hidden = !r.tarefas.length;
         salvarB.textContent = r.tarefas.length === 1 ? 'Criar a tarefa' : `Criar ${r.tarefas.length} tarefas`;
         salvarB.onclick = () => {
@@ -615,11 +615,28 @@ $('jor-busca').oninput = (ev) => { busca = ev.target.value; renderJournal(); };
 $('jor-entrevista').onclick = () => abrirEntrevistaDeHoje();
 $('jor-nova').onclick = () => abrirNovaNota();
 
+// Entrevista começada antes das 4h: quase sempre é sobre o dia anterior (bug de 23/10). Pergunta o dia,
+// com "Ontem" primeiro. Depois das 4h, segue direto com hoje.
+function escolherDiaDaEntrevista(aoEscolher) {
+  if (new Date().getHours() >= 4) { aoEscolher(hoje()); return; }
+  const ontem = somaDias(hoje(), -1);
+  const el = h(`<div class="menu-folha escolher-dia">
+    <p class="folha-pergunta">Esta entrevista é sobre qual dia?</p>
+    <button class="botao menta grande" data-d="${ontem}">Ontem, ${e(diaCurto(ontem))}</button>
+    <button class="botao cinza grande" data-d="${hoje()}">Hoje, ${e(diaCurto(hoje()))}</button>
+  </div>`);
+  el.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => fecharCamada().then(() => aoEscolher(b.dataset.d))));
+  abrirFolha(el);
+}
+window.escolherDiaDaEntrevista = escolherDiaDaEntrevista;
+
 function abrirEntrevistaDeHoje() {
-  atual = hoje();
-  history.pushState({ tela: 'entrevista' }, '');
-  irPara('entrevista');
-  iniciarEnt('dia');
+  escolherDiaDaEntrevista((k) => {
+    atual = k;
+    history.pushState({ tela: 'entrevista' }, '');
+    irPara('entrevista');
+    iniciarEnt('dia');
+  });
 }
 
 // ---------- nota aberta (leitura limpa; editar e trocar foto embaixo) ----------
@@ -1135,8 +1152,12 @@ function pontosCarrossel() {
 $('ini-ajustes').onclick = () => abrirAjustes();
 $('ini-ver-tudo').onclick = () => { vista = 'hoje'; irPara('tarefas'); };
 $('ini-entrevista').onclick = () => abrirEntrevistaDeHoje();
-// Na tela Hábitos, a entrevista é a do dia que está aberto ali.
-$('ent-hoje-btn').onclick = () => { history.pushState({ tela: 'entrevista' }, ''); irPara('entrevista'); iniciarEnt('dia'); };
+// Na tela Hábitos, a entrevista é a do dia que está aberto ali. Antes das 4h, pergunta se é a de ontem.
+$('ent-hoje-btn').onclick = () => {
+  const abrir = () => { history.pushState({ tela: 'entrevista' }, ''); irPara('entrevista'); iniciarEnt('dia'); };
+  if (atual === hoje() && window.escolherDiaDaEntrevista) window.escolherDiaDaEntrevista((k) => { atual = k; abrir(); });
+  else abrir();
+};
 $('ent-fechar').onclick = () => history.back();
 window.aoMudarEntrevista = () => { renderInicio(); renderJournal(); };
 

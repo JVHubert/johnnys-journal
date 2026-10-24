@@ -5,7 +5,7 @@
   color-scheme: dark;
   --chrome: #0D0806; --base: #120B09; --painel: #1A110D; --elevado: #281B15;
   --borda: #2C1F19; --grade: #1F1511; --borda-forte: #4A3A32;
-  --texto: #F2E7DF; --sec: #AD9588; --apagado: #735E53;
+  --texto: #F2E7DF; --sec: #AD9588; --apagado: #968073;
   --menta: #6EE29A; --menta-t: #0B2C18; --menta-esc: #2B6A45; --menta-esc-t: #D8F3E2; --verde-agua: #2E4A3F; --verde-cinza: #6AA08F;
   --violeta: #A98AF0; --violeta-t: #1A0F33; --violeta-esc: #4A3D6E;
   --coral: #EF7A6B; --coral-t: #2E0D08;
@@ -432,3 +432,7 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .il-botoes .botao.grande { margin: 8px 0; }
 .il-botoes .botao:disabled { opacity: .5; }
 .il-agora-nao { display: block; margin: 6px auto 0; }
+
+/* ---------- pergunta do dia da entrevista (antes das 4h) ---------- */
+.escolher-dia { padding: 4px 16px 16px; }
+.folha-pergunta { font-size: 18px; font-weight: 700; margin: 4px 0 8px; }

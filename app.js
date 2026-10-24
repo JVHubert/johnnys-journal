@@ -68,6 +68,8 @@ try {
 } catch (e) { /* começa vazio */ }
 // ?demo mostra o app com dados inventados, sem salvar nada (para conferir o visual)
 const DEMO = new URLSearchParams(location.search).has('demo');
+// Pede ao navegador para não apagar os dados deste app sozinho (o que ainda não subiu para o backup mora aqui).
+if (!DEMO && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 if (DEMO) {
   dados = { dias: {}, memorias: [{ modo: 'memoria', titulo: 'Pipa, setembro de 2026', data: '2026-10-13', respostas: ['Um mês em Pipa.'] }] };
   const frases = ['Treino cedo, PM3 rendeu, jantar com o pai.', 'Dia pesado no trabalho, mas li antes de dormir.', 'Corrida de 10 km e sol no fim da tarde.', '', 'Conversa boa com o Igor sobre o México.'];
@@ -82,9 +84,15 @@ const copiaDias = (d) => JSON.parse(JSON.stringify(d || {}));
 let fotoDias = copiaDias(dados.dias);
 function carimbarMudancas() { JJ.carimbar(fotoDias, dados.dias, Date.now()); fotoDias = copiaDias(dados.dias); }
 
+// Quantas mudanças ainda não subiram para o backup (zera quando o envio dá certo).
+const PEND_CHAVE = 'jj-pendentes';
+const lerPendentes = () => { try { return Number(localStorage.getItem(PEND_CHAVE)) || 0; } catch (e) { return 0; } };
+const gravarPendentes = (n) => { try { localStorage.setItem(PEND_CHAVE, String(Math.max(0, n))); } catch (e) { /* segue */ } };
+
 function salvar() {
   if (DEMO) return;
   carimbarMudancas();
+  if (token()) gravarPendentes(lerPendentes() + 1);
   try { localStorage.setItem(CHAVE, JSON.stringify(dados)); }
   catch (e) { avisar('Não consegui salvar neste navegador.'); }
   agendarSync();
@@ -719,7 +727,12 @@ function renderCartaoEntrevista(reg) {
   $('ent-hoje-btn').className = n ? 'botao contorno grande' : 'botao violeta grande';
   if (window.aoMudarEntrevista) window.aoMudarEntrevista();
 }
-$('ent-hoje-btn').onclick = () => { irPara('entrevista'); iniciarEnt('dia'); };
+// Hoje antes das 4h: pergunta se a entrevista é de ontem (novo.js, escolherDiaDaEntrevista).
+$('ent-hoje-btn').onclick = () => {
+  const abrir = () => { irPara('entrevista'); iniciarEnt('dia'); };
+  if (atual === hoje() && window.escolherDiaDaEntrevista) window.escolherDiaDaEntrevista((k) => { atual = k; abrir(); });
+  else abrir();
+};
 
 // ================= MÊS =================
 let mesRef = deChave(atual); mesRef.setDate(1);
@@ -955,6 +968,7 @@ async function sincronizar() {
   const tk = token(); if (!tk || DEMO) return 'desligado';
   if (syncRodando) { syncPendente = true; return 'na-fila'; }
   syncRodando = true;
+  const pendentesNoInicio = lerPendentes();
   const cab = { Authorization: `Bearer ${tk}`, Accept: 'application/vnd.github+json' };
   try {
     let ok = false;
@@ -982,11 +996,14 @@ async function sincronizar() {
     }
     if (!ok) throw new Error('conflito');
     const h = new Date();
+    gravarPendentes(lerPendentes() - pendentesNoInicio);
     statusSync(`Backup feito às ${pad(h.getHours())}:${pad(h.getMinutes())}.`);
     if (window.aoSincronizar) window.aoSincronizar();
     return 'ok';
   } catch (e) {
-    statusSync(e.message === 'token' ? 'O GitHub recusou o token. Cole um token novo.' : e.message === 'conflito' ? 'Não consegui gravar o backup. Toque em Sincronizar agora.' : 'Sem internet agora: tento de novo depois.');
+    const n = lerPendentes();
+    const espera = n ? ` ${n} ${n === 1 ? 'mudança esperando' : 'mudanças esperando'} envio.` : '';
+    statusSync((e.message === 'token' ? 'O GitHub recusou o token. Cole um token novo.' : e.message === 'conflito' ? 'Não consegui gravar o backup. Toque em Sincronizar agora.' : 'Sem internet agora: tento de novo depois.') + espera);
     if (e.message === 'token') { $('sync-form').hidden = false; }
     return 'erro';
   } finally {
