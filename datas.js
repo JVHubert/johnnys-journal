@@ -71,6 +71,16 @@ function proximaMensal(desde, doMes, incluir = true) {
 }
 
 /**
+ * Id da próxima ocorrência de uma tarefa que repete: "<série>@<data>". O PC, o celular e a nuvem chegam
+ * ao mesmo id, então concluir dos dois lados não cria duas repetições.
+ */
+export function idDaProximaRepeticao(t, data) {
+  const id = String(t.id || '')
+  const serie = t.serie || (id.includes('@') ? id.slice(0, id.indexOf('@')) : id)
+  return `${serie}@${data}`
+}
+
+/**
  * Repetição: os textos antigos ('diaria', 'semanal', 'mensal', 'anual') ou uma regra
  * { tipo: 'dia'|'semana'|'mes'|'ano', cada: N, dias: [1, 3], nDoMes: 2, diaSemana: 4, ultimoUtil: true }.
  */

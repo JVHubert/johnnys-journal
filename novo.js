@@ -2,7 +2,7 @@
 // (dados, salvar, hoje, HABITOS, entrevista, backup) e conversa com o serviço da Cloudflare do Journal
 // do PC: as tarefas vão e voltam por lá, e é de lá que vêm os avisos.
 // datas.js e astro.js são cópias dos arquivos do Journal do PC (bloco-de-notas-2/src): copie de novo quando mudarem.
-import { lerTarefaRapida, proximaRepeticao, rotuloData, rotuloRepetir } from './datas.js';
+import { lerTarefaRapida, proximaRepeticao, rotuloData, rotuloRepetir, idDaProximaRepeticao } from './datas.js';
 import { estacaoAtual, faseDaLua, NOME_ESTACAO } from './astro.js';
 
 // ---------- pequenos ajudantes ----------
@@ -143,7 +143,9 @@ function mudarTarefa(id, fn) {
   salvarT(); renderTarefas(); renderInicio(); agendarSincT();
 }
 function criarTarefa(info) {
-  const id = 'c' + novoId(), agora = Date.now();
+  const id = info.id || ('c' + novoId()), agora = Date.now();
+  // Repetição que o PC ou a nuvem já criou com o mesmo id: não cria outra.
+  if (info.id && T.lista[id] && !T.lista[id].apagada) return id;
   T.lista[id] = {
     id, titulo: info.titulo, data: info.data || null, hora: info.hora || null, repetir: info.repetir || null,
     projeto: info.projeto || null, etiquetas: info.etiquetas || [], importante: !!info.importante, feita: false,
@@ -164,7 +166,7 @@ function alternarFeita(id) {
   if (t.repetir && t.data) {
     let p = proximaRepeticao(t.data, t.repetir);
     while (p && p < hoje()) p = proximaRepeticao(p, t.repetir);
-    if (p) proxima = criarTarefa({ ...t, data: p, lembrete: null });
+    if (p) proxima = criarTarefa({ ...t, id: idDaProximaRepeticao(t, p), data: p, lembrete: null });
   }
   lanche('Concluída', () => {
     mudarTarefa(id, (x) => { x.feita = false; x.concluidaEm = null; });
@@ -310,7 +312,9 @@ function abrirDetalhe(id) {
     <label class="det-linha"><span>Projeto</span><input data-c="projeto" list="lista-projetos" placeholder="sem projeto" value="${e(t.projeto || '')}"></label>
     <datalist id="lista-projetos">${projetos().map((p) => `<option value="${e(p)}">`).join('')}</datalist>
     <label class="det-linha"><span>Etiquetas</span><input data-c="etiquetas" placeholder="casa, contas" value="${e((t.etiquetas || []).join(', '))}"></label>
-    <label class="det-notas"><span class="secao">Notas</span><textarea data-c="notas" rows="3" placeholder="Detalhes, endereço, telefone…">${e(t.notas || '')}</textarea></label>
+    <label class="det-notas"><span class="secao">Notas</span>${t.notasRicas
+      ? `<textarea rows="3" readonly>${e(t.notas || '')}</textarea><small class="det-aviso">Esta anotação tem lista, imagem ou link: edite no PC.</small>`
+      : `<textarea data-c="notas" rows="3" placeholder="Detalhes, endereço, telefone…">${e(t.notas || '')}</textarea>`}</label>
     <p class="meta salvo">Salvo · aparece também no PC</p>
     <button class="botao contorno-coral" id="det-apagar">Apagar</button>
   </div>`);

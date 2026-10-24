@@ -436,3 +436,4 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 /* ---------- pergunta do dia da entrevista (antes das 4h) ---------- */
 .escolher-dia { padding: 4px 16px 16px; }
 .folha-pergunta { font-size: 18px; font-weight: 700; margin: 4px 0 8px; }
+.det-aviso { display: block; color: var(--sec); font-size: 13px; margin-top: 6px; }
