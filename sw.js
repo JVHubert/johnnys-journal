@@ -1,7 +1,7 @@
 ﻿// Guarda os arquivos no aparelho para o app abrir sem internet.
 // Aumente a versÃ£o a cada publicaÃ§Ã£o para os celulares baixarem a nova.
 // Desde a 2.32.0 o celular e o PC tÃªm o MESMO nÃºmero de versÃ£o (Ã© um app sÃ³): suba os dois juntos.
-const VERSAO = '2.38.0';
+const VERSAO = '2.39.0';
 const PUBLICADA = '2026-10-24'; // mude junto com a VERSAO: aparece em Ajustes
 const CACHE = 'journal-' + VERSAO;
 const ARQUIVOS = [
