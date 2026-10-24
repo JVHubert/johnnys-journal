@@ -445,6 +445,8 @@ function abrirNovaTarefa(pre = {}) {
   dataInp.onchange = () => { ajuste.data = dataInp.value || null; atualizar(); };
   lemInp.onchange = () => { ajuste.lembrete = lemInp.value || null; atualizar(); };
   const abrirSeletor = (x) => { try { x.showPicker(); } catch (err) { x.click(); } };
+  // O toque nos botões não tira o foco do campo: senão o teclado fecha e abre de novo e a folha "pula".
+  el.addEventListener('pointerdown', (ev) => { if (ev.target.closest('#rap-chips button, .escolher-projeto button')) ev.preventDefault(); });
   el.querySelectorAll('#rap-chips button').forEach((b) => (b.onclick = () => {
     const a = b.dataset.a;
     if (a === 'hoje') ajuste.data = ajuste.data === hoje() ? null : hoje();
@@ -452,7 +454,8 @@ function abrirNovaTarefa(pre = {}) {
     if (a === 'data') abrirSeletor(dataInp);
     if (a === 'lembrete') { if (ajuste.lembrete) ajuste.lembrete = null; else { lemInp.value = `${ajuste.data || hoje()}T09:00`; abrirSeletor(lemInp); } }
     if (a === 'projeto') escolherProjeto(ajuste.projeto, (p) => { ajuste.projeto = p; atualizar(); });
-    atualizar(); inp.focus();
+    atualizar();
+    if (document.activeElement !== inp) inp.focus();
   }));
   abrirFolha(el);
   atualizar();
@@ -753,13 +756,15 @@ function abrirItem(it) {
   const quando = d ? d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== deChave(hoje()).getFullYear() ? { year: 'numeric' } : {}) }).replace('-feira', '') : '';
   const ehNota = it.tipo === 'nota';
   const ehEntDia = it.tipo === 'entrevista' && !!it.dia && !it.memoria;
+  const outras = it.dia ? (lerDia(it.dia).imagens || []) : [];
   const el = h(`<article class="nota-aberta">
     <div class="na-barra">
       <button class="icone-b" data-a="voltar" aria-label="Voltar">‹</button><span></span>
       <button class="icone-b apagado" data-a="editar" aria-label="Editar">✎</button>
-      ${ehNota || ehEntDia ? '<button class="icone-b apagado" data-a="mais" aria-label="Mais opções">⋯</button>' : ''}
+      ${ehNota || ehEntDia || it.memoria ? '<button class="icone-b apagado" data-a="mais" aria-label="Mais opções">⋯</button>' : ''}
     </div>
     ${it.foto ? '<div class="na-foto"><img alt=""></div>' : ''}
+    ${outras.length ? `<div class="na-outras faixa-rola" aria-label="Outras imagens do dia">${outras.map((x, i) => `<button class="na-mini" data-i="${i}" aria-label="Imagem ${i + 2}"><img alt=""></button>`).join('')}</div>` : ''}
     <div class="na-corpo">
       <p class="na-tipo"><i style="background:${esp.cor}"></i>${NOME_TIPO[it.tipo]} · ${e(esp.nome)}</p>
       <h1>${e(it.titulo || 'Sem título')}</h1>
@@ -769,7 +774,7 @@ function abrirItem(it) {
     <div class="na-pe">
       <span>Edição longa no PC</span>
       ${ehNota ? `<button class="botao cinza" data-a="foto">${it.foto ? 'Trocar foto' : 'Pôr foto'}</button>` : ''}
-      ${it.tipo === 'entrevista' && it.dia ? `<button class="botao cinza" data-a="ilustrar">${it.foto ? 'Trocar ilustração' : 'Criar ilustração'}</button>` : ''}
+      ${it.tipo === 'entrevista' && it.dia ? `<button class="botao cinza" data-a="ilustrar">${it.foto ? 'Trocar ilustração' : 'Criar ilustração'}</button><button class="botao cinza" data-a="foto-dia">Pôr foto</button>` : ''}
       <button class="botao menta" data-a="editar">Editar</button>
     </div>
   </article>`);
@@ -787,10 +792,42 @@ function abrirItem(it) {
   if (ilustrarB) ilustrarB.onclick = () => fecharCamada().then(() => abrirIlustracao(it.dia));
   const fotoB = el.querySelector('[data-a="foto"]');
   if (fotoB) fotoB.onclick = () => escolherFoto('galeria', async (blob) => { await guardarFotoDaNota(it.nota, blob); fecharCamada(); renderJournal(); });
+  // Imagens do dia: "Pôr foto" vira a principal (a anterior passa para as outras); tocar numa das outras
+  // deixa trocar a principal ou tirar a imagem do dia.
+  const reabrir = async () => {
+    await fecharCamada();
+    renderJournal(); renderInicio();
+    const novo = itensJournal().find((x) => x.id === it.id);
+    if (novo) abrirItem(novo);
+  };
+  const fotoDiaB = el.querySelector('[data-a="foto-dia"]');
+  if (fotoDiaB) fotoDiaB.onclick = () => escolherFoto('galeria', async (blob) => { await guardarImagemDoDia(it.dia, blob); await reabrir(); });
+  el.querySelectorAll('.na-mini').forEach((b) => {
+    const i = Number(b.dataset.i);
+    carregarFoto(outras[i].foto, b.querySelector('img'));
+    b.onclick = () => {
+      const menu = h('<div class="menu-folha"><button data-a="principal">Usar como principal</button><button class="coral" data-a="tirar">Tirar do dia</button></div>');
+      menu.querySelector('[data-a="principal"]').onclick = async () => { await fecharCamada(); tornarPrincipal(it.dia, i); await reabrir(); };
+      menu.querySelector('[data-a="tirar"]').onclick = async () => {
+        await fecharCamada();
+        const r = dia(it.dia), tirada = r.imagens[i];
+        r.imagens = r.imagens.filter((_, j) => j !== i);
+        salvar(); await reabrir();
+        lanche('Imagem tirada do dia', () => { const x = dia(it.dia); x.imagens = [...(x.imagens || [])]; x.imagens.splice(i, 0, tirada); salvar(); renderJournal(); });
+      };
+      abrirFolha(menu);
+    };
+  });
   const maisB = el.querySelector('[data-a="mais"]');
   if (maisB && ehEntDia) maisB.onclick = () => {
-    const menu = h('<div class="menu-folha"><button data-a="mudar-dia">Mudar o dia desta entrevista</button></div>');
+    const menu = h('<div class="menu-folha"><button data-a="mudar-dia">Mudar o dia desta entrevista</button><button class="coral" data-a="apagar">Apagar entrevista</button></div>');
     menu.querySelector('[data-a="mudar-dia"]').onclick = async () => { await fecharCamada(); await fecharCamada(); escolherNovoDia(it.dia); };
+    menu.querySelector('[data-a="apagar"]').onclick = async () => { await fecharCamada(); await fecharCamada(); apagarEntrevistaDoDia(it.dia); };
+    abrirFolha(menu);
+  };
+  else if (maisB && it.memoria) maisB.onclick = () => {
+    const menu = h('<div class="menu-folha"><button class="coral" data-a="apagar">Apagar memória</button></div>');
+    menu.querySelector('[data-a="apagar"]').onclick = async () => { await fecharCamada(); await fecharCamada(); apagarMemoria(it.memoria); };
     abrirFolha(menu);
   };
   else if (maisB) maisB.onclick = () => {
@@ -1052,6 +1089,8 @@ async function enviarFotosPendentes() {
       ...(dados.notas || []).filter((x) => x.fotoPendente && x.foto).map((n) => ({ caminho: n.foto, nome: n.id, alvo: n, carimbo: n })),
       ...Object.entries(dados.dias || {}).filter(([, d]) => d.ilustracao && d.ilustracao.fotoPendente && d.ilustracao.foto)
         .map(([k, d]) => ({ caminho: d.ilustracao.foto, nome: 'ilustração ' + k, alvo: d.ilustracao, carimbo: d })),
+      ...Object.entries(dados.dias || {}).flatMap(([k, d]) => (d.imagens || []).filter((x) => x && x.fotoPendente && x.foto)
+        .map((x) => ({ caminho: x.foto, nome: 'imagem ' + k, alvo: x, carimbo: d }))),
     ];
     for (const x of pendentes) {
       const c = await caches.open(FOTOS);
@@ -1095,6 +1134,50 @@ function entrevistaInteira(k) {
 }
 const base64ParaBlob = async (b64) => (await fetch('data:image/png;base64,' + b64)).blob();
 
+// Imagens do dia: uma principal (`ilustracao`, vira a capa no PC) e as outras em `imagens`.
+// Uma principal nova não apaga a anterior: ela passa para as outras.
+async function guardarImagemDoDia(k, blob, cena = '') {
+  const caminho = `fotos/ilustracao-${k}-${Date.now().toString(36)}.jpg`;
+  await guardarNoCelular(caminho, blob);
+  const r = dia(k);
+  if (r.ilustracao && r.ilustracao.foto) r.imagens = [{ ...r.ilustracao }, ...(r.imagens || [])];
+  r.ilustracao = { foto: caminho, fotoPendente: true, cena, t: Date.now() };
+  salvar();
+  enviarFotosPendentes();
+}
+function tornarPrincipal(k, i) {
+  const r = dia(k);
+  const x = (r.imagens || [])[i];
+  if (!x) return;
+  const resto = r.imagens.filter((_, j) => j !== i);
+  r.imagens = r.ilustracao && r.ilustracao.foto ? [{ ...r.ilustracao }, ...resto] : resto;
+  r.ilustracao = { ...x, t: Date.now() };
+  salvar();
+}
+
+// Apagar a entrevista do dia: saem junto o tweet e as imagens. A entrevista vazia fica marcada `apagada`
+// (o juntar.js respeita, senão a cópia do backup traria de volta; o PC manda a página para a Lixeira).
+const CAMPOS_DA_ENTREVISTA = ['entrevista', 'tweet', 'tweetRascunho', 'ilustracao', 'imagens'];
+function apagarEntrevistaDoDia(k) {
+  const r = dia(k);
+  const antes = JSON.parse(JSON.stringify(Object.fromEntries(CAMPOS_DA_ENTREVISTA.filter((c) => c in r).map((c) => [c, r[c]]))));
+  CAMPOS_DA_ENTREVISTA.forEach((c) => delete r[c]);
+  r.entrevista = { modo: 'dia', data: k, respostas: [], apagada: true, t: Date.now() };
+  salvar(); renderTudo();
+  lanche('Entrevista apagada', () => {
+    const x = dia(k);
+    CAMPOS_DA_ENTREVISTA.forEach((c) => delete x[c]);
+    Object.assign(x, antes);
+    salvar(); renderTudo();
+  });
+}
+function apagarMemoria(m) {
+  const antes = [...(m.respostas || [])];
+  Object.assign(m, { respostas: [], apagada: true, t: Date.now() });
+  salvar(); renderTudo();
+  lanche('Memória apagada', () => { m.respostas = antes; delete m.apagada; m.t = Date.now(); salvar(); renderTudo(); });
+}
+
 function abrirIlustracao(k) {
   const texto = entrevistaInteira(k);
   if (!texto) { lanche('Faça a entrevista do dia antes.'); return; }
@@ -1114,6 +1197,7 @@ function abrirIlustracao(k) {
         <button class="botao menta grande" data-a="usar">Usar esta</button>
         <button class="botao cinza grande" data-a="outra">Fazer outra</button>
       </div>
+      <button class="link il-galeria" data-a="galeria">Usar uma foto da galeria</button>
       <button class="link il-agora-nao" data-a="voltar">${escolhida ? 'Manter a que eu já tinha' : 'Agora não'}</button>
     </div>
   </article>`);
@@ -1160,17 +1244,18 @@ function abrirIlustracao(k) {
   el.querySelector('[data-a="usar"]').onclick = async () => {
     if (!atualIl) return;
     const blob = await reduzir(await base64ParaBlob(atualIl.imagem), 1600);
-    const caminho = `fotos/ilustracao-${k}-${Date.now().toString(36)}.jpg`;
-    await guardarNoCelular(caminho, blob);
-    const r = dia(k);
-    r.ilustracao = { foto: caminho, fotoPendente: true, cena: atualIl.cena || '', t: Date.now() };
-    salvar();
+    await guardarImagemDoDia(k, blob, atualIl.cena || '');
     delete rascunhosIlustra[k];
-    enviarFotosPendentes();
     await fecharCamada();
     renderJournal(); renderInicio();
-    lanche('Ilustração guardada. Ela vai para o Journal do PC.');
+    lanche(escolhida ? 'Ilustração guardada como principal. A anterior continua no dia.' : 'Ilustração guardada. Ela vai para o Journal do PC.');
   };
+  el.querySelector('[data-a="galeria"]').onclick = () => escolherFoto('galeria', async (blob) => {
+    await guardarImagemDoDia(k, blob);
+    await fecharCamada();
+    renderJournal(); renderInicio();
+    lanche(escolhida ? 'Foto guardada como principal. A anterior continua no dia.' : 'Foto guardada como principal do dia.');
+  });
   abrirCheia(el);
   if (rascunhosIlustra[k]) mostrar(rascunhosIlustra[k]); else pedir();
 }
@@ -1332,7 +1417,64 @@ const chave2 = (rotulo, ligado, aoMudar, extra = '') => {
   return el;
 };
 let ajustesAvisos = null;
+
+// ================= TRAVA COM A DIGITAL =================
+// Usa a chave de acesso do Android (a mesma que os sites usam para entrar sem senha): o app pede a digital
+// (ou o PIN do celular) ao abrir e ao voltar depois de alguns minutos fora. Os dados continuam no celular
+// como antes: a trava só fecha a porta de entrada. O index.html já esconde tudo antes de desenhar.
+const TRAVA_MINUTOS = 5;
+const bytesAleatorios = (n) => crypto.getRandomValues(new Uint8Array(n));
+const paraB64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const trava = () => lerLS('jj-trava', null);
+async function pedirDigital() {
+  const t = trava();
+  if (!t) return true;
+  try {
+    await navigator.credentials.get({ publicKey: { challenge: bytesAleatorios(32), allowCredentials: [{ type: 'public-key', id: deB64url(t.id) }], userVerification: 'required', timeout: 60000 } });
+    return true;
+  } catch (err) { return false; }
+}
+let destravando = false;
+async function destravar() {
+  if (destravando) return;
+  destravando = true; $('trava-erro').textContent = '';
+  if (await pedirDigital()) document.documentElement.classList.remove('trancado');
+  else $('trava-erro').textContent = 'Não destravou. Toque no botão para tentar de novo.';
+  destravando = false;
+}
+$('trava-abrir').onclick = destravar;
+let foraDesde = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { foraDesde = Date.now(); return; }
+  if (trava() && foraDesde && Date.now() - foraDesde > TRAVA_MINUTOS * 60000) { document.documentElement.classList.add('trancado'); destravar(); }
+});
+// depois do resto do arquivo carregar (o deB64url fica lá embaixo, com os avisos)
+if (document.documentElement.classList.contains('trancado')) setTimeout(destravar, 0);
+async function ligarTrava() {
+  if (!window.PublicKeyCredential) { avisar('Este navegador não tem a trava com digital.'); return; }
+  try {
+    const cred = await navigator.credentials.create({ publicKey: {
+      rp: { name: "Johnny's Journal" }, user: { id: bytesAleatorios(16), name: 'Journal', displayName: "Johnny's Journal" },
+      challenge: bytesAleatorios(32), pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' }, timeout: 60000,
+    } });
+    gravarLS('jj-trava', { id: paraB64url(cred.rawId), desde: Date.now() });
+    avisar('Trava ligada. O Journal vai pedir a digital ao abrir.');
+  } catch (err) { avisar(err.name === 'NotAllowedError' ? 'A trava não foi ligada (cancelado).' : 'Não consegui ligar a trava (' + err.message + ').'); }
+}
+function renderAjTrava() {
+  const box = $('aj-trava'); box.innerHTML = '';
+  box.appendChild(chave2('Pedir a digital ao abrir', !!trava(), async (v) => {
+    if (v) await ligarTrava();
+    else if (await pedirDigital()) { try { localStorage.removeItem('jj-trava'); } catch (err) { /* segue */ } avisar('Trava desligada.'); }
+    else avisar('Para desligar, confirme com a digital.');
+    renderAjTrava();
+  }));
+  box.appendChild(h(`<p class="meta">Pede de novo quando o app volta depois de ${TRAVA_MINUTOS} minutos fora. Sem a digital, o PIN do celular também destrava.</p>`));
+}
+
 async function renderAjustes() {
+  renderAjTrava();
   const ini = $('aj-inicio'); ini.innerHTML = '';
   [['contadores', 'Contadores'], ['lua', 'Fase da Lua'], ['hoje', 'Tarefas de hoje'], ['habitos', 'Hábitos que faltam'], ['neste', 'Neste dia'], ['entrevista', 'Atalho da entrevista']]
     .forEach(([k, r]) => ini.appendChild(chave2(r, prefs[k], (v) => { prefs[k] = v; gravarLS('jj-inicio', prefs); renderInicio(); })));
@@ -1425,8 +1567,9 @@ function renderAjHabitos() {
 function mostrarVersao() {
   const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
   const escrever = (v) => {
-    const [a, m, d] = String(v.publicada || '').split('-');
-    $('aj-versao').textContent = `Versão do app: ${v.versao}${d ? ` · publicada em ${d}/${m}/${a}` : ''}`;
+    const [data, hora] = String(v.publicada || '').split('T');
+    const [a, m, d] = data.split('-');
+    $('aj-versao').textContent = `Versão do app: ${v.versao}${d ? ` · publicada em ${d}/${m}/${a}${hora ? ' às ' + hora : ''}` : ''}`;
   };
   if (!sw) { $('aj-versao').textContent = 'Versão do app: sem a cópia offline neste aparelho'; return; }
   const canal = new MessageChannel();

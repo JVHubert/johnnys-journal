@@ -10,6 +10,8 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="stylesheet" href="style.css">
+  <!-- trava com a digital: esconde tudo antes de desenhar a tela (o novo.js destrava) -->
+  <script>try { if (localStorage.getItem('jj-trava')) document.documentElement.classList.add('trancado'); } catch (e) { /* segue */ }</script>
 </head>
 <body>
   <main id="app">
@@ -220,6 +222,9 @@
       <h2 class="secao">Avisos</h2>
       <div class="card lista-chaves" id="aj-avisos"></div>
 
+      <h2 class="secao">Trava</h2>
+      <div class="card lista-chaves" id="aj-trava"></div>
+
       <h2 class="secao">Backup e ligação com o PC</h2>
       <div class="card">
         <p class="meta"><span id="sync-status"></span> <button class="link" id="sync-agora" hidden>Sincronizar agora</button></p>
@@ -275,6 +280,12 @@
     <button data-tela="habitos"><span class="pilula"><img alt="" data-icone="habitos"></span><span>Hábitos</span></button>
     <button data-tela="journal"><span class="pilula"><img alt="" data-icone="journal"></span><span>Journal</span></button>
   </nav>
+
+  <div id="trava" role="dialog" aria-modal="true" aria-label="Journal trancado">
+    <p class="trava-titulo">Journal trancado</p>
+    <button class="botao menta grande" id="trava-abrir">Destravar com a digital</button>
+    <p class="meta" id="trava-erro"></p>
+  </div>
 
   <div id="aviso" role="status"></div>
   <div id="lanche" role="status" hidden><span id="lanche-txt"></span><button id="lanche-acao">Desfazer</button></div>

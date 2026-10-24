@@ -459,3 +459,16 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .escolher-dia { padding: 4px 16px 16px; }
 .folha-pergunta { font-size: 18px; font-weight: 700; margin: 4px 0 8px; }
 .det-aviso { display: block; color: var(--sec); font-size: 13px; margin-top: 6px; }
+/* imagens do dia: a principal em cima, as outras numa faixa embaixo */
+.na-outras { margin: 10px 0 0; padding-top: 2px; padding-bottom: 2px; }
+.na-mini { width: 72px; height: 72px; padding: 0; border-radius: 10px; overflow: hidden; background: var(--elevado); border: 1px solid var(--borda); }
+.na-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.na-pe:has(.botao + .botao + .botao) { flex-wrap: wrap; }
+.na-pe:has(.botao + .botao + .botao) span { flex-basis: 100%; }
+.il-galeria { display: block; margin: 14px auto 0; color: var(--sec); }
+
+/* trava com a digital */
+#trava { display: none; position: fixed; inset: 0; z-index: 100; background: var(--base); flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; }
+.trancado #trava { display: flex; }
+.trancado #app, .trancado .barra, .trancado #cheia, .trancado #folha, .trancado #veu { visibility: hidden; }
+.trava-titulo { font-size: 22px; font-weight: 700; margin: 0; }
