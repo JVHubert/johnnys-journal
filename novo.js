@@ -820,6 +820,7 @@ function editarNota(n, fotoNova = null, comecarDitando = false) {
         </div>
         <p class="dit-dica">toque no quadrado para parar</p>
       </div>
+      <div class="en-foto-opcoes" hidden><button class="botao contorno" data-a="foto-camera">Câmera</button><button class="botao contorno" data-a="foto-galeria">Galeria</button></div>
     </div>
   </div>`);
   const img = el.querySelector('.na-foto img'), texto = el.querySelector('.en-texto');
@@ -828,10 +829,12 @@ function editarNota(n, fotoNova = null, comecarDitando = false) {
   else if (n.foto) { el.querySelector('.na-foto').hidden = false; carregarFoto(n.foto, img); }
   let ditado = null;
   el.querySelector('[data-a="cancelar"]').onclick = fecharCamada;
-  el.querySelectorAll('[data-a="camera"]').forEach((b) => (b.onclick = () => escolherFoto('camera', mostrarFoto)));
+  el.querySelectorAll('[data-a="camera"]').forEach((b) => (b.onclick = () => { el.querySelector('.en-foto-opcoes').hidden = false; }));
+  el.querySelector('[data-a="foto-camera"]').onclick = () => escolherFoto('camera', mostrarFoto);
+  el.querySelector('[data-a="foto-galeria"]').onclick = () => escolherFoto('galeria', mostrarFoto);
   el.querySelector('[data-a="ditar"]').onclick = () => { ditado = ditarNaNota(el, texto); };
   el.querySelector('[data-a="parar"]').onclick = () => ditado && ditado.parar();
-  el.querySelector('[data-a="teclado"]').onclick = () => { ditado && ditado.parar(); texto.focus(); };
+  el.querySelector('[data-a="teclado"]').onclick = () => { if (ditado) ditado.escrever(); else texto.focus(); };
   el.querySelector('[data-a="salvar"]').onclick = async () => {
     if (ditado && ditado.ouvindo()) { avisar('Pare o ditado primeiro (quadrado).'); return; }
     const titulo = el.querySelector('.en-titulo').value.trim(), corpo = texto.value.trim();
@@ -859,6 +862,7 @@ function ditarNaNota(el, texto) {
   const painel = el.querySelector('.painel-ditado'), ferr = el.querySelector('.en-ferramentas');
   const estado = el.querySelector('.dit-estado'), dica = el.querySelector('.dit-dica');
   let rec = null, fluxo = null, cancelado = false, desligar = () => {}, relogio = null;
+  let comecarNaLinha = false;   // botão "Aa": o texto vem e o cursor fica numa linha nova
   const fechar = () => { clearInterval(relogio); desligar(); fluxo && fluxo.getTracks().forEach((x) => x.stop()); painel.hidden = true; ferr.hidden = false; };
   (async () => {
     try { fluxo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
@@ -887,8 +891,14 @@ function ditarNaNota(el, texto) {
         if (cancelado) return;
         const novo = (r.texto || '').trim();
         if (!novo) avisar('Não veio texto dessa gravação. Confira o microfone e tente de novo.');
-        else texto.value = (texto.value.trim() ? texto.value.trim() + (texto.value.endsWith('\n') ? '' : ' ') : '') + novo;
+        else {
+          // Cada trecho ditado entra numa linha nova. Nota vazia: entra sozinho, sem linha em branco antes.
+          const antes = texto.value.replace(/\s+$/, '');
+          texto.value = (antes ? antes + '\n' : '') + novo + (comecarNaLinha ? '\n' : '');
+        }
         fechar();
+        // "Aa" (parar e escrever): o cursor fica numa linha nova no fim, pronto para digitar.
+        if (comecarNaLinha && novo) setTimeout(() => { texto.focus(); texto.setSelectionRange(texto.value.length, texto.value.length); }, 0);
       } catch (err) {
         painel.classList.remove('pensando');
         estado.textContent = err.message === 'sem-ligacao' ? 'Falta ligar o backup em Ajustes.' : 'Não consegui transcrever (' + err.message + ').';
@@ -900,6 +910,8 @@ function ditarNaNota(el, texto) {
   })();
   return {
     parar: () => { if (rec && rec.state === 'recording') rec.stop(); },
+    // "Aa": para o ditado e, quando o texto chegar, deixa uma linha nova no fim com o cursor nela.
+    escrever: () => { comecarNaLinha = true; if (rec && rec.state === 'recording') rec.stop(); },
     cancelar: () => { cancelado = true; if (rec && rec.state === 'recording') rec.stop(); fechar(); },
     ouvindo: () => !!rec && rec.state === 'recording',
   };
@@ -910,7 +922,8 @@ function ditarNaNota(el, texto) {
 function escolherFoto(modo, aoEscolher) {
   const inp = document.createElement('input');
   inp.type = 'file'; inp.accept = 'image/*';
-  if (modo === 'camera') inp.capture = 'environment';
+  // O atributo (e não a propriedade) é o que o navegador lê para abrir a câmera direto.
+  if (modo === 'camera') inp.setAttribute('capture', 'environment');
   inp.onchange = async () => {
     const f = inp.files && inp.files[0];
     if (!f) return;
