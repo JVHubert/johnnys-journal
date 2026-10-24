@@ -531,7 +531,8 @@ function itensJournal() {
     const temEnt = resp.some(Boolean), tw = (d.tweet || '').trim();
     if (!temEnt && !tw) continue;
     out.push({ id: 'dia-' + k, tipo: temEnt ? 'entrevista' : 'tweet', espaco: 'journal', data: k, dia: k,
-      titulo: tw || `Entrevista de ${k.slice(8)}/${k.slice(5, 7)}`, texto: temEnt ? resp.filter(Boolean).join(' ') : '', t: d.t || 0 });
+      titulo: tw || `Entrevista de ${k.slice(8)}/${k.slice(5, 7)}`, texto: temEnt ? resp.filter(Boolean).join(' ') : '',
+      foto: (d.ilustracao && d.ilustracao.foto) || null, t: d.t || 0 });
   }
   for (const m of dados.memorias || []) {
     if (!(m.respostas || []).some(Boolean)) continue;
@@ -652,6 +653,7 @@ function abrirItem(it) {
     <div class="na-pe">
       <span>Edição longa no PC</span>
       ${ehNota ? `<button class="botao cinza" data-a="foto">${it.foto ? 'Trocar foto' : 'Pôr foto'}</button>` : ''}
+      ${it.tipo === 'entrevista' && it.dia ? `<button class="botao cinza" data-a="ilustrar">${it.foto ? 'Trocar ilustração' : 'Criar ilustração'}</button>` : ''}
       <button class="botao menta" data-a="editar">Editar</button>
     </div>
   </article>`);
@@ -665,6 +667,8 @@ function abrirItem(it) {
       else { atual = it.dia; irPara('habitos'); setTimeout(() => $('tweet').focus(), 80); }
     });
   }));
+  const ilustrarB = el.querySelector('[data-a="ilustrar"]');
+  if (ilustrarB) ilustrarB.onclick = () => fecharCamada().then(() => abrirIlustracao(it.dia));
   const fotoB = el.querySelector('[data-a="foto"]');
   if (fotoB) fotoB.onclick = () => escolherFoto('galeria', async (blob) => { await guardarFotoDaNota(it.nota, blob); fecharCamada(); renderJournal(); });
   const maisB = el.querySelector('[data-a="mais"]');
@@ -853,9 +857,12 @@ async function reduzir(arquivo, lado) {
   return new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.82));
 }
 const FOTOS = 'jj-fotos';
+async function guardarNoCelular(caminho, blob) {
+  try { const c = await caches.open(FOTOS); await c.put('/' + caminho, new Response(blob, { headers: { 'content-type': 'image/jpeg' } })); } catch (err) { /* sem cache: só envia */ }
+}
 async function guardarFotoDaNota(nota, blob, semSalvar = false) {
   const caminho = `fotos/${nota.id}-${Date.now().toString(36)}.jpg`;
-  try { const c = await caches.open(FOTOS); await c.put('/' + caminho, new Response(blob, { headers: { 'content-type': 'image/jpeg' } })); } catch (err) { /* sem cache: só envia */ }
+  await guardarNoCelular(caminho, blob);
   nota.foto = caminho; nota.fotoPendente = true; nota.t = Date.now();
   if (!semSalvar) salvar();
   enviarFotosPendentes();
@@ -865,15 +872,22 @@ async function enviarFotosPendentes() {
   if (DEMO || enviandoFotos || !token()) return;
   enviandoFotos = true;
   try {
-    for (const n of (dados.notas || []).filter((x) => x.fotoPendente && x.foto)) {
+    // Notas com foto e dias com ilustração escolhida. Depois de subir, o carimbo t muda para o PC
+    // trazer de novo a página, agora com a imagem.
+    const pendentes = [
+      ...(dados.notas || []).filter((x) => x.fotoPendente && x.foto).map((n) => ({ caminho: n.foto, nome: n.id, alvo: n, carimbo: n })),
+      ...Object.entries(dados.dias || {}).filter(([, d]) => d.ilustracao && d.ilustracao.fotoPendente && d.ilustracao.foto)
+        .map(([k, d]) => ({ caminho: d.ilustracao.foto, nome: 'ilustração ' + k, alvo: d.ilustracao, carimbo: d })),
+    ];
+    for (const x of pendentes) {
       const c = await caches.open(FOTOS);
-      const r = await c.match('/' + n.foto);
-      if (!r) { n.fotoPendente = false; continue; }
+      const r = await c.match('/' + x.caminho);
+      if (!r) { x.alvo.fotoPendente = false; continue; }
       const b64 = await paraBase64(await r.blob());
-      const url = REPO_DADOS.replace(/[^/]+$/, n.foto);
+      const url = REPO_DADOS.replace(/[^/]+$/, x.caminho);
       const p = await fetch(url, { method: 'PUT', headers: { Authorization: `Bearer ${token()}`, Accept: 'application/vnd.github+json' },
-        body: JSON.stringify({ message: 'foto ' + n.id, content: b64, branch: 'main' }) });
-      if (p.ok || p.status === 422) { n.fotoPendente = false; n.t = Date.now(); salvar(); }
+        body: JSON.stringify({ message: 'foto ' + x.nome, content: b64, branch: 'main' }) });
+      if (p.ok || p.status === 422) { x.alvo.fotoPendente = false; x.carimbo.t = Date.now(); salvar(); }
     }
   } catch (err) { /* sem internet: tenta depois */ } finally { enviandoFotos = false; }
 }
@@ -894,6 +908,99 @@ async function carregarFoto(caminho, img) {
     img.closest('.carregando')?.classList.remove('carregando');
   } catch (err) { /* fica sem a foto */ }
 }
+
+// ================= ILUSTRAÇÃO DO DIA =================
+// Ao fim da entrevista (e pelo botão "Criar ilustração" do dia), o serviço do Journal lê a entrevista,
+// escolhe a cena e desenha no estilo lápis (IA da Cloudflare). O JV confirma ou pede outra, dizendo o que
+// mudar se quiser. A escolhida vira a foto do dia aqui e no calendário do Journal do PC.
+const rascunhosIlustra = {}; // a última sugestão de cada dia, para não gastar outro desenho ao voltar
+function entrevistaInteira(k) {
+  const ent = lerDia(k).entrevista;
+  const temas = ENTREVISTAS[(ent && ent.modo) || 'dia'] || [];
+  return ((ent && ent.respostas) || []).map((x, i) => (x && String(x).trim() ? `${(temas[i] || {}).tema || 'Parte ' + (i + 1)}: ${String(x).trim()}` : '')).filter(Boolean).join('\n\n');
+}
+const base64ParaBlob = async (b64) => (await fetch('data:image/png;base64,' + b64)).blob();
+
+function abrirIlustracao(k) {
+  const texto = entrevistaInteira(k);
+  if (!texto) { lanche('Faça a entrevista do dia antes.'); return; }
+  const d = deChave(k);
+  const quando = d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).replace('-feira', '');
+  const escolhida = (lerDia(k).ilustracao || {}).foto;
+  const el = h(`<article class="ilustra">
+    <div class="na-barra"><button class="icone-b" data-a="voltar" aria-label="Voltar">‹</button><span></span></div>
+    <div class="il-corpo">
+      <p class="il-data">${e(quando)}</p>
+      <h1>Ilustração do dia</h1>
+      <div class="il-quadro"><img alt="" hidden><p class="il-espera" role="status"></p></div>
+      <p class="il-cena"></p>
+      <label class="il-ajuste" hidden>O que mudar? <span>(opcional)</span>
+        <input class="campo" maxlength="300" placeholder="ex.: só eu e meu pai, mais de longe"></label>
+      <div class="il-botoes" hidden>
+        <button class="botao menta grande" data-a="usar">Usar esta</button>
+        <button class="botao cinza grande" data-a="outra">Fazer outra</button>
+      </div>
+      <button class="link il-agora-nao" data-a="voltar">${escolhida ? 'Manter a que eu já tinha' : 'Agora não'}</button>
+    </div>
+  </article>`);
+  const img = el.querySelector('.il-quadro img');
+  const espera = el.querySelector('.il-espera');
+  const cena = el.querySelector('.il-cena');
+  const ajuste = el.querySelector('.il-ajuste input');
+  const botoes = el.querySelector('.il-botoes');
+  let atualIl = null, pedindo = false;
+
+  const mostrar = (r) => {
+    atualIl = r;
+    img.src = 'data:image/png;base64,' + r.imagem; img.hidden = false;
+    espera.textContent = ''; espera.hidden = true;
+    el.querySelector('.il-quadro').classList.remove('desenhando');
+    cena.textContent = r.cena || '';
+    el.querySelector('.il-ajuste').hidden = false; botoes.hidden = false;
+  };
+  const pedir = async () => {
+    if (pedindo) return;
+    pedindo = true;
+    el.querySelector('.il-quadro').classList.add('desenhando');
+    espera.hidden = false; espera.textContent = atualIl ? 'Desenhando outra versão…' : 'Lendo o seu dia e desenhando… (uns 5 segundos)';
+    botoes.querySelectorAll('button').forEach((b) => (b.disabled = true));
+    try {
+      const r = await nuvem('/ilustracao-do-dia', { texto, ajuste: ajuste.value.trim(), cenaAnterior: atualIl ? atualIl.cenaEn : '' });
+      rascunhosIlustra[k] = r;
+      ajuste.value = '';
+      mostrar(r);
+    } catch (err) {
+      const msg = String(err.message || err);
+      espera.textContent = COTA_ACABOU.test(msg) ? 'Os desenhos grátis de hoje acabaram. Tente de novo amanhã.'
+        : msg === 'sem-ligacao' || err instanceof TypeError ? 'Sem conexão com o serviço do Journal. Tente quando tiver internet.'
+        : 'Não consegui desenhar agora (' + msg + ').';
+      if (atualIl) { img.hidden = false; botoes.hidden = false; }
+      el.querySelector('.il-quadro').classList.remove('desenhando');
+    } finally {
+      pedindo = false;
+      botoes.querySelectorAll('button').forEach((b) => (b.disabled = false));
+    }
+  };
+  el.querySelectorAll('[data-a="voltar"]').forEach((b) => (b.onclick = fecharCamada));
+  el.querySelector('[data-a="outra"]').onclick = pedir;
+  el.querySelector('[data-a="usar"]').onclick = async () => {
+    if (!atualIl) return;
+    const blob = await reduzir(await base64ParaBlob(atualIl.imagem), 1600);
+    const caminho = `fotos/ilustracao-${k}-${Date.now().toString(36)}.jpg`;
+    await guardarNoCelular(caminho, blob);
+    const r = dia(k);
+    r.ilustracao = { foto: caminho, fotoPendente: true, cena: atualIl.cena || '', t: Date.now() };
+    salvar();
+    delete rascunhosIlustra[k];
+    enviarFotosPendentes();
+    await fecharCamada();
+    renderJournal(); renderInicio();
+    lanche('Ilustração guardada. Ela vai para o Journal do PC.');
+  };
+  abrirCheia(el);
+  if (rascunhosIlustra[k]) mostrar(rascunhosIlustra[k]); else pedir();
+}
+window.abrirIlustracao = abrirIlustracao;
 
 // ================= INÍCIO =================
 const PREFS_PADRAO = { contadores: true, lua: true, hoje: true, habitos: true, neste: true, entrevista: true };

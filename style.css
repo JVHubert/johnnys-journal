@@ -320,6 +320,7 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .mural-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .cartao-j { text-align: left; background: var(--painel); border: 1px solid var(--borda); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
 .cartao-j .foto { display: block; background: var(--elevado); min-height: 120px; }
+.cartao-j .foto:not(.carregando) { min-height: 0; } /* imagem deitada (ilustração do dia) não deixa faixa vazia */
 .cartao-j .foto img { width: 100%; display: block; max-height: 260px; object-fit: cover; }
 .cj-corpo { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cj-corpo b { font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
@@ -408,3 +409,24 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 #falha .principal { background: var(--menta); color: var(--menta-t); min-height: 48px; border-radius: 12px; padding: 0 18px; font-weight: 700; }
 
 @media print { body { background: #fff; color: #000; } .barra, .fab { display: none; } }
+
+/* ---------- ilustração do dia ---------- */
+.ilustra { min-height: 100%; display: flex; flex-direction: column; }
+.il-corpo { padding: 0 16px 28px; }
+.il-data { color: var(--sec); margin: 4px 0 2px; font-size: 14px; }
+.ilustra h1 { font-size: 24px; margin: 0 0 14px; }
+.il-quadro { position: relative; aspect-ratio: 1376 / 768; border-radius: 14px; overflow: hidden; background: var(--elevado); border: 1px solid var(--borda-forte); display: grid; place-items: center; }
+.il-quadro img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.il-quadro img[hidden] { display: none; }
+.il-espera { margin: 0; padding: 16px; text-align: center; color: var(--sec); font-size: 15px; }
+.il-quadro.desenhando::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.06) 50%, transparent 70%); background-size: 200% 100%; animation: brilho 1.4s linear infinite; }
+.il-quadro.desenhando img { opacity: .35; }
+.il-quadro.desenhando .il-espera { position: absolute; }
+@keyframes brilho { to { background-position: -200% 0; } }
+.il-cena { font-size: 16px; line-height: 1.45; margin: 12px 0 4px; }
+.il-cena:empty { display: none; }
+.il-ajuste { display: block; margin-top: 14px; font-weight: 600; }
+.il-ajuste span { color: var(--sec); font-weight: 400; }
+.il-botoes .botao.grande { margin: 8px 0; }
+.il-botoes .botao:disabled { opacity: .5; }
+.il-agora-nao { display: block; margin: 6px auto 0; }

@@ -682,6 +682,8 @@ function concluirDia() {
   }, 80);
   const feita = { respostas: ent ? ent.respostas : (r.entrevista || {}).respostas || [] };
   sincronizarAgora('Entrevista guardada. Revise o tweet.');
+  // a ilustração do dia aparece por cima: o JV confirma ou pede outra (novo.js)
+  if (window.abrirIlustracao && !DEMO) setTimeout(() => window.abrirIlustracao(data), 400);
   // troca o rascunho por um tweet do Groq, se o JV ainda não mexeu nele
   tweetComGroq(r.entrevista || feita).then((tw) => {
     const d = lerDia(data);
