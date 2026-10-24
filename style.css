@@ -234,6 +234,12 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .dit-tarefa input { width: 22px; height: 22px; accent-color: var(--menta); margin-top: 2px; }
 .dit-tarefa span { display: flex; flex-direction: column; }
 .dit-tarefa small { color: var(--sec); }
+/* "Para quando?" da tarefa ditada sem data (antes de criar) */
+.dit-quando { align-self: stretch; text-align: left; display: flex; flex-direction: column; gap: 8px; padding: 8px 0 12px 34px; border-bottom: 1px solid var(--grade); }
+.dit-quando .meta { margin: 0; }
+.dit-quando-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.dit-quando-botoes button { min-height: 40px; padding: 0 14px; border-radius: 12px; background: var(--elevado); border: 1px solid var(--borda); color: var(--texto); font-size: 14px; }
+.dit-quando-botoes button[aria-pressed="true"] { background: var(--menta-esc); border-color: var(--menta); color: var(--menta); font-weight: 700; }
 
 /* ================= HÁBITOS ================= */
 .chave-dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--painel); border: 1px solid var(--borda); border-radius: 14px; padding: 4px; margin: 18px 0 6px; }

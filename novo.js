@@ -486,15 +486,62 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
         salvarB.hidden = false;
         salvarB.onclick = () => { const txt = saida.querySelector('textarea').value; fecharCamada().then(() => aoTexto(txt)); };
       } else {
-        saida.innerHTML = r.tarefas.map((t, i) => `<label class="dit-tarefa"><input type="checkbox" checked data-i="${i}"><span><b>${e(t.titulo)}</b><small>${e([t.data && rotuloData(t.data, hoje()), t.hora, t.projeto && '@' + t.projeto].filter(Boolean).join(' · '))}</small></span></label>`).join('') || `<p>${e(r.texto)}</p>`;
-        salvarB.hidden = !r.tarefas.length;
-        salvarB.textContent = r.tarefas.length === 1 ? 'Criar a tarefa' : `Criar ${r.tarefas.length} tarefas`;
-        salvarB.onclick = () => {
-          const escolhidas = [...saida.querySelectorAll('input:checked')].map((c) => r.tarefas[Number(c.dataset.i)]);
-          escolhidas.forEach((t) => aoTarefas(t));
-          fecharCamada();
-          avisar(escolhidas.length === 1 ? 'Tarefa criada.' : `${escolhidas.length} tarefas criadas.`);
+        // Dentro de um projeto aberto, as tarefas ditadas ficam nele, mesmo que a IA tenha sugerido outro.
+        const projetoFixo = projetoAberto || null;
+        // Tarefa ditada sem data pergunta "Para quando?". Só cria depois que o JV respondeu cada uma.
+        const quando = new Array(r.tarefas.length).fill(undefined);   // { data } — data null quer dizer "Sem data"
+        const conferir = () => {
+          const marcadas = [...saida.querySelectorAll('input:checked')].map((c) => Number(c.dataset.i));
+          salvarB.disabled = marcadas.some((i) => !r.tarefas[i].data && !quando[i]);
+          salvarB.textContent = (r.tarefas.length === 1 ? 'Criar a tarefa' : `Criar ${r.tarefas.length} tarefas`)
+            + (salvarB.disabled ? ' (escolha o dia)' : '');
         };
+        const pergunta = (i) => r.tarefas[i].data ? '' : `<div class="dit-quando" data-i="${i}">
+          <span class="meta">Para quando?</span>
+          <div class="dit-quando-botoes"><button type="button" data-q="hoje">Hoje</button><button type="button" data-q="amanha">Amanhã</button><button type="button" data-q="data">Escolher data</button><button type="button" data-q="sem">Sem data</button></div>
+          <input type="date" class="escondido" data-d="${i}">
+        </div>`;
+        saida.innerHTML = r.tarefas.map((t, i) => `<label class="dit-tarefa"><input type="checkbox" checked data-i="${i}"><span><b>${e(t.titulo)}</b><small>${e([t.data && rotuloData(t.data, hoje()), t.hora, (projetoFixo || t.projeto) && '@' + (projetoFixo || t.projeto)].filter(Boolean).join(' · '))}</small></span></label>${pergunta(i)}`).join('') || `<p>${e(r.texto)}</p>`;
+        const escolher = (i, data) => {
+          quando[i] = { data };
+          const box = saida.querySelector(`.dit-quando[data-i="${i}"]`);
+          if (box) {
+            box.querySelector('.meta').textContent = 'Para quando? ' + (data ? rotuloData(data, hoje()) : 'sem data');
+            box.querySelectorAll('button').forEach((b) => {
+              const q = b.dataset.q;
+              const marcado = q === 'sem' ? data === null
+                : q === 'hoje' ? data === hoje()
+                : q === 'amanha' ? data === somaDias(hoje(), 1)
+                : !!data && data !== hoje() && data !== somaDias(hoje(), 1);
+              b.setAttribute('aria-pressed', String(marcado));
+            });
+          }
+          conferir();
+        };
+        saida.querySelectorAll('.dit-quando').forEach((box) => {
+          const i = Number(box.dataset.i);
+          const campo = box.querySelector('input[type="date"]');
+          box.querySelectorAll('button').forEach((b) => (b.onclick = () => {
+            const q = b.dataset.q;
+            if (q === 'hoje') escolher(i, hoje());
+            else if (q === 'amanha') escolher(i, somaDias(hoje(), 1));
+            else if (q === 'sem') escolher(i, null);
+            else { campo.value = campo.value || hoje(); try { campo.showPicker(); } catch (err) { campo.click(); } }
+          }));
+          campo.onchange = () => { if (campo.value) escolher(i, campo.value); };
+        });
+        saida.querySelectorAll('input[type="checkbox"]').forEach((c) => (c.onchange = conferir));
+        salvarB.hidden = !r.tarefas.length;
+        salvarB.onclick = () => {
+          const marcadas = [...saida.querySelectorAll('input:checked')].map((c) => Number(c.dataset.i));
+          marcadas.forEach((i) => {
+            const t = r.tarefas[i];
+            aoTarefas({ ...t, data: t.data || (quando[i] ? quando[i].data : null), projeto: projetoFixo || t.projeto || null });
+          });
+          fecharCamada();
+          avisar(marcadas.length === 1 ? 'Tarefa criada.' : `${marcadas.length} tarefas criadas.`);
+        };
+        conferir();
       }
     } catch (err) {
       el.classList.remove('pensando');
@@ -536,7 +583,8 @@ function ditarTarefas() {
     titulo: 'Ditando tarefas',
     aoTarefas: (t) => {
       const r = lerTarefaRapida(t.frase || t.titulo, hoje());
-      criarTarefa({ titulo: t.titulo || r.titulo, data: t.data || r.data, hora: t.hora || r.hora, repetir: r.repetir, projeto: t.projeto || r.projeto, etiquetas: t.etiquetas?.length ? t.etiquetas : r.etiquetas, importante: t.importante || r.importante, notas: t.notas });
+      // A escolha de "Para quando?" vale como a data: data null (escolhida "Sem data") não vira a data da fala.
+      criarTarefa({ titulo: t.titulo || r.titulo, data: t.data === undefined ? r.data : t.data, hora: t.hora || r.hora, repetir: r.repetir, projeto: projetoAberto || t.projeto || r.projeto, etiquetas: t.etiquetas?.length ? t.etiquetas : r.etiquetas, importante: t.importante || r.importante, notas: t.notas });
     },
   });
 }
