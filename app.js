@@ -20,17 +20,8 @@ const INICIO = '2026-10-13';            // primeiro dia do tracker
 const PM3_FIM = '2026-11-01';           // fim da licença da PM3
 const PM3_META_HORAS = 30;              // ≈ 53h de curso assistidas em 1,75x
 
-const HABITOS = [
-  { id: 'acordar', nome: 'Acordei às 7h', grupo: 'Manhã', curto: 'Acordei 7h' },
-  { id: 'treino', nome: 'Exercício', grupo: 'Manhã', curto: 'Exercício' },
-  { id: 'agua', nome: 'Água', sub: 'meta: 3 garrafas de 710 mL · a 4ª é bônus', grupo: 'Durante o dia', tipo: 'agua', curto: 'Água' },
-  { id: 'macros', nome: 'Macros + budget', sub: 'anotar calorias e despesas', grupo: 'Durante o dia', curto: 'Macros + budget' },
-  { id: 'pm3', nome: 'PM3', sub: 'horas assistidas hoje', grupo: 'Durante o dia', tipo: 'horas', ate: PM3_FIM, curto: 'PM3' },
-  { id: 'semp', nome: 'Sem p + TikTok', grupo: 'Durante o dia', curto: 'Sem p + TikTok' },
-  { id: 'leitura', nome: 'Leitura antes de dormir', grupo: 'Noite', curto: 'Leitura' },
-  { id: 'celular', nome: 'Celular fora do quarto', sub: 'às 22h30', grupo: 'Noite', curto: 'Celular 22h30' },
-  { id: 'journal', nome: 'Journal', sub: 'entrevista ou tweet', grupo: 'Noite', curto: 'Journal' },
-];
+// A lista de hábitos fica nos dados (Ajustes > Hábitos, desde a 2.34.0); sem lista, vale a de antes (habitos-lista.js).
+let HABITOS = JJH.habitosDe(null);
 
 const ENTREVISTAS = {
   dia: [
@@ -79,6 +70,8 @@ if (DEMO) {
     dados.dias[k] = { h: { acordar: s(1), treino: s(2), macros: s(3), semp: s(4), leitura: s(5), celular: s(6), journal: s(7) }, agua: (i * 3) % 5, pm3: i < 15 ? [2, 2.5, 3, 1.5][i % 4] : 0, tweet: frases[i % 5] };
   }
 }
+HABITOS = JJH.habitosDe(dados);
+
 // Foto dos dias como estavam no último salvar/sincronizar: salvar() carimba só os campos que mudaram (juntar.js).
 const copiaDias = (d) => JSON.parse(JSON.stringify(d || {}));
 let fotoDias = copiaDias(dados.dias);
@@ -111,7 +104,7 @@ const deChave = (k) => { const [a, m, d] = k.split('-').map(Number); return new 
 const somaDias = (k, n) => { const d = deChave(k); d.setDate(d.getDate() + n); return chave(d); };
 const hoje = () => (DEMO ? '2026-10-30' : chave(new Date()));
 const fds = (k) => [0, 6].includes(deChave(k).getDay());
-const ativo = (h, k) => k >= INICIO && (!h.ate || k <= h.ate);
+const ativo = (h, k) => JJH.ativo(h, k, INICIO);
 
 // Estado de um hábito num dia:
 //   'ok' feito · 'parcial' meta pela metade (água, PM3) · 'x' não feito · 'na' não se aplica · '' sem registro
@@ -634,7 +627,7 @@ async function modeloTexto(k) {
   try { localStorage.setItem('jj-groq-modelo', JSON.stringify({ id, t: Date.now() })); } catch (e) { /* segue */ }
   return id;
 }
-// O tweet sai do serviço do Journal na nuvem (Gemini 3.5 Flash, escolha do JV em 23/10), que recebe a
+// O tweet sai do serviço do Journal na nuvem (IA da Cloudflare, que não treina com o texto; desde 24/10), que recebe a
 // entrevista INTEIRA e escolhe o que mais vale lembrar; se ele falhar, o Groq direto daqui, como antes.
 async function tweetComGroq(e) {
   const base = textoBase(e);
@@ -982,6 +975,7 @@ async function sincronizar() {
       const junto = juntar(dados, remoto);
       const mudouLocal = JSON.stringify(junto) !== JSON.stringify(dados);
       dados = junto;
+      HABITOS = JJH.habitosDe(dados);
       fotoDias = copiaDias(dados.dias);
       try { localStorage.setItem(CHAVE, JSON.stringify(dados)); } catch (e) { /* segue */ }
       if (aplicarSugestoes()) { carimbarMudancas(); try { localStorage.setItem(CHAVE, JSON.stringify(dados)); } catch (e) { /* segue */ } }

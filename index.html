@@ -213,6 +213,9 @@
       <h2 class="secao">Contadores pessoais</h2>
       <div class="card" id="aj-contadores"></div>
 
+      <h2 class="secao">Hábitos</h2>
+      <div class="card" id="aj-habitos"></div>
+
       <h2 class="secao">Avisos</h2>
       <div class="card lista-chaves" id="aj-avisos"></div>
 
@@ -238,6 +241,21 @@
         <button class="link" id="groq-trocar" hidden>Trocar a chave</button>
       </div>
 
+      <h2 class="secao">Para onde vão os seus dados</h2>
+      <div class="card dados-destino" id="aj-dados">
+        <p>Quase tudo fica nos seus aparelhos. Isto é o que sai, e para onde:</p>
+        <ul>
+          <li><b>Hábitos, entrevistas, notas e fotos do celular:</b> backup no GitHub, num repositório privado. Lá ficam em texto aberto.</li>
+          <li><b>Tarefas:</b> banco da Cloudflare, para ir e voltar entre o PC e o celular.</li>
+          <li><b>Entrevista inteira</b> (para o tweet do dia e a cena da ilustração): IA da Cloudflare, que não usa o texto para treinar.</li>
+          <li><b>Áudio da entrevista:</b> Groq, com a sua chave, para virar texto.</li>
+          <li><b>Áudio do ditado de tarefas:</b> Cloudflare (se a cota grátis do dia acabar, Groq). O texto ditado vai ao DeepSeek, que separa as tarefas.</li>
+          <li><b>Cena da ilustração</b> (uma frase em inglês, sem nomes): Pollinations, que desenha.</li>
+          <li><b>Avisos:</b> saem da Cloudflare pelo serviço de avisos do Chrome (Google), cifrados.</li>
+          <li><b>Páginas e imagens do PC:</b> ficam no PC; a pasta é copiada pelo Google Drive.</li>
+        </ul>
+      </div>
+
       <p class="versao-app" id="aj-versao"></p>
     </section>
 
@@ -260,6 +278,7 @@
   <div id="aviso" role="status"></div>
   <div id="lanche" role="status" hidden><span id="lanche-txt"></span><button id="lanche-acao">Desfazer</button></div>
   <script src="juntar.js"></script>
+  <script src="habitos-lista.js"></script>
   <script src="app.js"></script>
   <script type="module" src="novo.js"></script>
 </body>

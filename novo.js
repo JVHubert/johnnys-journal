@@ -92,13 +92,15 @@ async function buscarLigacao() {
   } catch (err) { /* sem internet: tenta depois */ }
   return ligacao;
 }
-async function nuvem(rota, corpo, metodo = 'POST') {
+async function nuvem(rota, corpo, metodo = 'POST', deNovo = false) {
   const l = await buscarLigacao();
   if (!l) throw new Error('sem-ligacao');
   const r = await fetch(l.url + rota, {
     method: metodo, headers: { 'content-type': 'application/json', 'x-segredo': l.segredo },
     body: metodo === 'GET' ? undefined : JSON.stringify(corpo || {}),
   });
+  // Senha recusada: a senha foi trocada no PC (trocar-senha.cmd). Busca a ligação de novo no GitHub e tenta uma vez.
+  if (r.status === 403 && !deNovo) { ligacao = null; gravarLS('jj-nuvem', null); return nuvem(rota, corpo, metodo, true); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.erro || 'erro ' + r.status);
   return j;
@@ -208,6 +210,7 @@ function renderSinc() {
   const b = $('tar-sinc');
   const semLig = !ligacao && !DEMO;
   b.classList.toggle('erro', !!T.erro && !semLig);
+  b.classList.toggle('desligado', semLig);
   let txt;
   if (DEMO) txt = 'atualizado há 2 min';
   else if (semLig) txt = 'não ligado';
@@ -1230,6 +1233,7 @@ async function renderAjustes() {
   [['contadores', 'Contadores'], ['lua', 'Fase da Lua'], ['hoje', 'Tarefas de hoje'], ['habitos', 'Hábitos que faltam'], ['neste', 'Neste dia'], ['entrevista', 'Atalho da entrevista']]
     .forEach(([k, r]) => ini.appendChild(chave2(r, prefs[k], (v) => { prefs[k] = v; gravarLS('jj-inicio', prefs); renderInicio(); })));
   renderAjContadores();
+  renderAjHabitos();
   mostrarVersao();
   $('aj-ligacao').textContent = DEMO ? '' : ligacao ? 'Ligado ao Journal do PC: as tarefas vão e voltam.' : token() ? 'Procurando a ligação com o PC…' : '';
   // avisos (os horários ficam no serviço, que é quem manda)
@@ -1267,6 +1271,49 @@ function renderAjContadores() {
   });
   const f = h(`<form class="novo-contador"><input class="campo" name="nome" placeholder="Ex.: Casa nova" required><input class="campo" type="date" name="data" required><button class="botao menta">Adicionar</button></form>`);
   f.onsubmit = (ev) => { ev.preventDefault(); const nome = f.nome.value.trim(), data = f.data.value; if (nome && data) gravar([...lista, { id: novoId(), nome, data }]); };
+  box.appendChild(f);
+}
+
+// Hábitos: a lista fica em dados.habitos (vale a mais nova, juntar.js) e o PC lê a mesma.
+// O id nunca muda; parar põe "ate" = ontem e o histórico fica (habitos-lista.js).
+function renderAjHabitos() {
+  const box = $('aj-habitos'); box.innerHTML = '';
+  const lista = JJH.habitosDe(dados);
+  const gravar = (nova) => {
+    dados.habitos = nova; dados.habitosT = Date.now(); HABITOS = JJH.habitosDe(dados);
+    salvar(); renderAjHabitos(); renderTudo(); renderInicio();
+  };
+  const opcoesGrupo = (atual) => JJH.GRUPOS.map((g) => `<option${g === atual ? ' selected' : ''}>${g}</option>`).join('');
+  lista.forEach((hb, i) => {
+    const parado = hb.ate && hb.ate < hoje();
+    const detalhe = parado ? `Parado desde ${e(hb.ate.split('-').reverse().join('/'))}` : e([hb.grupo, hb.sub].filter(Boolean).join(' · '));
+    const l = h(`<div class="linha-habito${parado ? ' parado' : ''}"><button class="lh-nome" data-a="editar"><b>${e(hb.nome)}</b><small class="meta">${detalhe}</small></button>
+      <button aria-label="Subir" ${i === 0 ? 'disabled' : ''}>↑</button><button aria-label="Descer" ${i === lista.length - 1 ? 'disabled' : ''}>↓</button></div>`);
+    const [editar, sobe, desce] = l.querySelectorAll('button');
+    sobe.onclick = () => gravar(JJH.mover(lista, hb.id, -1));
+    desce.onclick = () => gravar(JJH.mover(lista, hb.id, 1));
+    editar.onclick = () => {
+      const f = h(`<form class="menu-folha editar-habito">
+        <p class="folha-pergunta">Hábito</p>
+        <input class="campo" name="nome" maxlength="60" required value="${e(hb.nome)}" aria-label="Nome">
+        <input class="campo" name="sub" maxlength="80" placeholder="Detalhe (opcional)" value="${e(hb.sub || '')}" aria-label="Detalhe">
+        <select class="campo" name="grupo" aria-label="Quando">${opcoesGrupo(hb.grupo)}</select>
+        <button class="botao menta grande" type="submit">Salvar</button>
+        <button class="botao cinza grande" type="button" data-a="parar">${parado ? 'Voltar a acompanhar' : 'Parar de acompanhar'}</button>
+      </form>`);
+      f.onsubmit = (ev) => { ev.preventDefault(); fecharCamada().then(() => gravar(JJH.renomear(lista, hb.id, { nome: f.nome.value, sub: f.sub.value, grupo: f.grupo.value }))); };
+      f.querySelector('[data-a="parar"]').onclick = () => fecharCamada().then(() => {
+        if (parado) { gravar(JJH.voltar(lista, hb.id)); return; }
+        gravar(JJH.parar(lista, hb.id, hoje(), somaDias(hoje(), -1)));
+        lanche('Hábito parado: o histórico fica', () => gravar(lista));
+      });
+      abrirFolha(f);
+    };
+    box.appendChild(l);
+  });
+  const f = h(`<form class="novo-habito"><input class="campo" name="nome" maxlength="60" placeholder="Novo hábito. Ex.: Meditar 10 min" required>
+    <select class="campo" name="grupo" aria-label="Quando">${opcoesGrupo('Durante o dia')}</select><button class="botao menta">Adicionar</button></form>`);
+  f.onsubmit = (ev) => { ev.preventDefault(); const nome = f.nome.value.trim(); if (nome) gravar(JJH.adicionar(lista, { nome, grupo: f.grupo.value }, hoje())); };
   box.appendChild(f);
 }
 

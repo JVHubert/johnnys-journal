@@ -34,6 +34,8 @@ h2 { font-size: 20px; margin: 0; }
 .escondido { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
 
 #app { max-width: 560px; margin: 0 auto; padding: 0 16px calc(96px + var(--gesto)); }
+/* Tarefas e Journal têm botões flutuantes: espaço embaixo para o fim da lista não ficar escondido atrás deles. */
+body[data-tela="tarefas"] #app, body[data-tela="journal"] #app { padding-bottom: calc(230px + var(--gesto)); }
 .tela { min-height: 70vh; }
 .topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 18px 0 10px; }
 .card { background: var(--painel); border: 1px solid var(--borda); border-radius: 16px; padding: 14px; margin: 10px 0; }
@@ -150,6 +152,7 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .sinc { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13px; color: var(--sec); }
 .sinc .bolinha { width: 8px; height: 8px; border-radius: 50%; background: var(--menta); }
 .sinc.erro .bolinha { background: var(--coral); }
+.sinc.desligado .bolinha { background: var(--apagado); }
 .abas-topo { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--painel); border: 1px solid var(--borda); border-radius: 14px; padding: 4px; position: sticky; top: 0; z-index: 5; }
 .abas-topo button { min-height: 44px; border-radius: 10px; font-size: 14px; color: var(--sec); }
 .abas-topo button small { font-size: 12px; opacity: .8; }
@@ -397,6 +400,15 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .linha-contador span { flex: 1; display: flex; flex-direction: column; }
 .linha-contador button { width: 40px; height: 40px; border-radius: 10px; background: var(--elevado); }
 .novo-contador { display: grid; grid-template-columns: 1fr; gap: 2px; margin-top: 10px; }
+.linha-habito { display: flex; align-items: center; gap: 4px; min-height: 52px; border-bottom: 1px solid var(--grade); }
+.linha-habito .lh-nome { flex: 1; display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: none; min-height: 52px; justify-content: center; }
+.linha-habito button[aria-label] { width: 40px; height: 40px; border-radius: 10px; background: var(--elevado); }
+.linha-habito.parado b { color: var(--apagado); }
+.novo-habito { display: grid; grid-template-columns: 1fr; gap: 2px; margin-top: 10px; }
+.dados-destino p { margin: 0 0 8px; }
+.dados-destino ul { margin: 0; padding-left: 18px; }
+.dados-destino li { margin: 6px 0; color: var(--sec); }
+.dados-destino li b { color: var(--texto); }
 .pedido-avisos { text-align: center; padding: 6px 4px; }
 .pedido-avisos .sino { width: 64px; height: 64px; border-radius: 20px; background: var(--menta-esc); color: var(--menta); display: grid; place-items: center; margin: 6px auto 12px; }
 .pedido-avisos ul { list-style: none; padding: 0; text-align: left; margin: 16px 0; }

@@ -102,6 +102,9 @@
     // contadores pessoais da Início: a lista inteira, vale a mais nova
     const ct = (local.contadoresT || 0) >= (remoto.contadoresT || 0) ? local : remoto;
     if (ct.contadores) { r.contadores = ct.contadores; r.contadoresT = ct.contadoresT || 0; }
+    // lista de hábitos (editada em Ajustes): a lista inteira, vale a mais nova
+    const hb = [local, remoto].filter((x) => Array.isArray(x.habitos)).sort((a, b) => (b.habitosT || 0) - (a.habitosT || 0))[0];
+    if (hb) { r.habitos = hb.habitos; r.habitosT = hb.habitosT || 0; } else { delete r.habitos; delete r.habitosT; }
     // caixa: tarefas escritas no celular para o Journal do PC (junta as duas pontas pelo id)
     const caixa = new Map();
     for (const c of [...(remoto.caixa || []), ...(local.caixa || [])]) if (c && c.id && (!caixa.has(c.id) || (c.t || 0) >= (caixa.get(c.id).t || 0))) caixa.set(c.id, c);
