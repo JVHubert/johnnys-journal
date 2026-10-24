@@ -59,12 +59,43 @@ window.addEventListener('popstate', () => {
   if (telaAtual === 'entrevista' || telaAtual === 'ajustes') irPara(telaDaBarra);
 });
 
+// A alça de cima também serve para puxar a folha para baixo e fechar. Usa eventos de ponteiro
+// (funciona no dedo e com o mouse). Puxão curto devolve a folha para o lugar.
+const PUXAO_PARA_FECHAR = 100;
+function arrastarParaFechar(f, alca) {
+  let inicioY = 0, descido = 0, puxando = false;
+  const soltar = () => {
+    if (!puxando) return;
+    puxando = false;
+    if (descido > PUXAO_PARA_FECHAR) { fecharCamada(); return; }   // a folha sai pelo fundo e a camada fecha
+    f.style.transition = 'transform .16s ease-out';
+    f.style.transform = 'translateY(0px)';
+  };
+  alca.addEventListener('pointerdown', (ev) => {
+    if (ev.button) return;
+    ev.preventDefault();
+    puxando = true; descido = 0; inicioY = ev.clientY;
+    f.style.transition = 'none';
+    try { alca.setPointerCapture(ev.pointerId); } catch (err) { /* sem captura: segue com o dedo por cima da alça */ }
+  });
+  alca.addEventListener('pointermove', (ev) => {
+    if (!puxando) return;
+    descido = Math.max(0, ev.clientY - inicioY);
+    f.style.transform = `translateY(${descido}px)`;
+  });
+  alca.addEventListener('pointerup', soltar);
+  alca.addEventListener('pointercancel', soltar);
+}
+
 function abrirFolha(conteudo, aoFechar) {
   const f = $('folha');
   f.innerHTML = '';
-  f.appendChild(h('<div class="folha-alca" aria-hidden="true"></div>'));
+  f.style.transition = ''; f.style.transform = '';   // a folha de antes pode ter sido arrastada
+  const alca = h('<div class="folha-alca" aria-hidden="true"></div>');
+  f.appendChild(alca);
   f.appendChild(conteudo);
   f.hidden = false; $('veu').hidden = false;
+  arrastarParaFechar(f, alca);
   abrirCamada(() => { f.hidden = true; $('veu').hidden = true; f.innerHTML = ''; aoFechar && aoFechar(); });
 }
 $('veu').onclick = fecharCamada;

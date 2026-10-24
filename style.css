@@ -78,7 +78,9 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 /* ---------- folha que sobe e tela cheia ---------- */
 #veu { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 46; }
 .folha { position: fixed; left: 0; right: 0; bottom: 0; z-index: 47; max-height: 88vh; overflow-y: auto; background: var(--painel); border-top: 1px solid var(--borda-forte); border-radius: 22px 22px 0 0; padding: 8px 16px calc(18px + var(--gesto)); max-width: 560px; margin: 0 auto; animation: sobe .18s ease-out; }
-.folha-alca { width: 40px; height: 4px; border-radius: 2px; background: var(--borda-forte); margin: 4px auto 10px; }
+/* A área de pegar é alta (para o dedo); a barrinha desenhada continua do mesmo tamanho. */
+.folha-alca { width: 100%; height: 26px; margin: 0 0 2px; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
+.folha-alca::before { content: ''; width: 40px; height: 4px; border-radius: 2px; background: var(--borda-forte); }
 @keyframes sobe { from { transform: translateY(30px); opacity: .4; } }
 .sobre { position: fixed; inset: 0; z-index: 45; background: var(--base); overflow-y: auto; padding: 0 16px calc(24px + var(--gesto)); }
 .sobre > * { max-width: 560px; margin-left: auto; margin-right: auto; }
