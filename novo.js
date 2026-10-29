@@ -219,6 +219,9 @@ function metaTarefa(t) {
   else if (t.hora) partes.push(e(t.hora));
   if (t.repetir) partes.push(`<span title="${e(rotuloRepetir(t.repetir))}">↻</span>`);
   if (t.lembrete) partes.push('<span title="lembrete">⏰</span>');
+  if (t.prazo) partes.push(`<span class="mostarda">◷ ${e(curtoPrazo(t.prazo))}</span>`);
+  if (t.subtarefas?.length) partes.push(`<span>${t.subtarefas.filter((x) => x.feita).length}/${t.subtarefas.length}</span>`);
+  if (t.pomodoros && (t.pomodoros.meta || t.pomodoros.feitos)) partes.push(`<span class="coral">🍅 ${t.pomodoros.feitos || 0}${t.pomodoros.meta ? '/' + t.pomodoros.meta : ''}</span>`);
   if (t.projeto) partes.push(`<span><b style="color:${corProjeto(t.projeto)}">@</b>${e(t.projeto)}</span>`);
   if ((t.origem || '').startsWith('plano:')) partes.push('<span class="selo">Plano</span>');
   return partes.join('<i class="sep">·</i>');
@@ -337,55 +340,184 @@ setInterval(renderSinc, 30000);
 
 // ---------- detalhe da tarefa (folha que sobe) ----------
 const REPETIR = [['', 'Não repete'], ['diaria', 'Todo dia'], ['semanal', 'Toda semana'], ['mensal', 'Todo mês'], ['anual', 'Todo ano']];
+// ---------- detalhe da tarefa (2.70, desenho 1b do Claude Design) ----------
+// Tela cheia: topo com ‹ e o projeto, círculo + título, botões de data / prazo / Importante,
+// subtarefas, anotações e, embaixo, Repetir, Etiquetas, Lembretes e Pomodoros. Tudo salva sozinho.
+// Tocar na data abre a folha de data (frase, atalhos, calendário, hora e repetir).
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const DIAS_CURTOS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const diaDe = (s) => new Date(s + 'T12:00:00');
+const curtoData = (s) => { const d = diaDe(s); return `${DIAS_CURTOS[d.getDay()]} ${d.getDate()} ${MESES_CURTOS[d.getMonth()]}`; };
+const curtoPrazo = (s) => { const d = diaDe(s); return `${d.getDate()} ${MESES_CURTOS[d.getMonth()]}`; };
+const novoSubId = () => 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
 function abrirDetalhe(id) {
-  const t = T.lista[id];
-  if (!t) return;
-  const rep = typeof t.repetir === 'string' || !t.repetir ? (t.repetir || '') : 'outro';
-  const el = h(`<div class="detalhe">
-    <div class="det-topo"><textarea class="det-titulo" rows="1" aria-label="Título">${e(t.titulo)}</textarea>
-      <button class="estrela-botao${t.importante ? ' ligada' : ''}" aria-label="Importante" aria-pressed="${!!t.importante}">★</button></div>
-    <div class="det-linha"><span>Data</span><input type="date" data-c="data" aria-label="Data" value="${e(t.data || '')}"><button type="button" class="link apagado det-sem-data" id="det-sem-data">Sem data</button></div>
-    <label class="det-linha"><span>Hora</span><input type="time" data-c="hora" value="${e(t.hora || '')}"></label>
-    <label class="det-linha"><span>Repetir</span><select data-c="repetir">${REPETIR.map(([v, r]) => `<option value="${v}"${v === rep ? ' selected' : ''}>${r}</option>`).join('')}${rep === 'outro' ? `<option value="outro" selected>${e(rotuloRepetir(t.repetir))}</option>` : ''}</select></label>
-    <label class="det-linha"><span>Lembrete</span><input type="datetime-local" data-c="lembrete" value="${e(t.lembrete || '')}"></label>
-    <label class="det-linha"><span>Projeto</span><input data-c="projeto" list="lista-projetos" placeholder="sem projeto" value="${e(t.projeto || '')}"></label>
-    <datalist id="lista-projetos">${projetos().map((p) => `<option value="${e(p)}">`).join('')}</datalist>
-    <label class="det-linha"><span>Etiquetas</span><input data-c="etiquetas" placeholder="casa, contas" value="${e((t.etiquetas || []).join(', '))}"></label>
-    <label class="det-notas"><span class="secao">Notas</span>${t.notasRicas
-      ? `<textarea rows="3" readonly>${e(t.notas || '')}</textarea><small class="det-aviso">Esta anotação tem lista, imagem ou link: edite no PC.</small>`
-      : `<textarea data-c="notas" rows="3" placeholder="Detalhes, endereço, telefone…">${e(t.notas || '')}</textarea>`}</label>
-    <p class="meta salvo">Salvo · aparece também no PC</p>
-    <button class="botao contorno-coral" id="det-apagar">Apagar</button>
-  </div>`);
-  const tit = el.querySelector('.det-titulo');
-  const crescer = () => { tit.style.height = 'auto'; tit.style.height = tit.scrollHeight + 'px'; };
-  setTimeout(crescer, 0);
-  tit.oninput = crescer;
-  tit.onchange = () => { const v = tit.value.trim(); if (v) mudarTarefa(id, (x) => { x.titulo = v; }); };
-  el.querySelector('.estrela-botao').onclick = (ev) => {
-    const lig = !T.lista[id].importante;
-    mudarTarefa(id, (x) => { x.importante = lig; });
-    ev.currentTarget.classList.toggle('ligada', lig); ev.currentTarget.setAttribute('aria-pressed', String(lig));
+  if (!T.lista[id]) return;
+  const el = h('<div class="det2"></div>');
+  const desenhar = () => {
+    const t = T.lista[id];
+    if (!t) return;
+    const subs = t.subtarefas || [];
+    const pomo = t.pomodoros && (t.pomodoros.meta || t.pomodoros.feitos) ? t.pomodoros : null;
+    const rep = typeof t.repetir === 'string' || !t.repetir ? (t.repetir || '') : 'outro';
+    el.innerHTML = `
+      <div class="det2-topo">
+        <button class="det2-voltar" aria-label="Voltar">‹</button>
+        <button class="det2-projeto"><i class="ponto" style="background:${t.projeto ? corProjeto(t.projeto) : 'var(--apagado)'}"></i>${e(t.projeto || 'Sem projeto')}</button>
+        <button class="det2-mais" aria-label="Mais opções">⋯</button>
+      </div>
+      <div class="det2-cabeca">
+        <button class="circulo grande${t.feita ? ' feito' : ''}" aria-label="${t.feita ? 'Reabrir' : 'Concluir'}">${t.feita ? '✓' : ''}</button>
+        <textarea class="det2-titulo${t.feita ? ' riscado' : ''}" rows="1" aria-label="Título">${e(t.titulo)}</textarea>
+      </div>
+      <div class="det2-botoes">
+        <button class="det2-pil" data-acao="data">▣ ${t.data ? e(curtoData(t.data)) + (t.hora ? ' ' + e(t.hora) : '') : 'Data'}</button>
+        <button class="det2-pil prazo${t.prazo ? ' marcado' : ''}" data-acao="prazo">◷ ${t.prazo ? e(curtoPrazo(t.prazo)) : 'Prazo'}</button>
+        <button class="det2-pil importante${t.importante ? ' ligado' : ''}" data-acao="importante" aria-pressed="${!!t.importante}">! Importante</button>
+        <input type="date" class="escondido" id="det2-prazo" value="${e(t.prazo || '')}">
+      </div>
+      <ul class="det2-subs">
+        ${subs.map((s) => `<li data-s="${e(s.id)}"><button class="circulo${s.feita ? ' feito' : ''}" aria-label="${s.feita ? 'Reabrir' : 'Concluir'} subtarefa">${s.feita ? '✓' : ''}</button>
+          <span class="${s.feita ? 'riscado' : ''}">${e(s.titulo)}</span><button class="det2-tirar" aria-label="Tirar subtarefa">×</button></li>`).join('')}
+        <li class="det2-nova"><span class="mais">+</span><input placeholder="Adicionar subtarefa" enterkeyhint="done" aria-label="Adicionar subtarefa"></li>
+      </ul>
+      ${t.notasRicas
+        ? `<textarea class="det2-notas" rows="4" readonly>${e(t.notas || '')}</textarea><small class="det-aviso">Esta anotação tem lista, imagem ou link: edite no PC.</small>`
+        : `<textarea class="det2-notas" rows="4" placeholder="Anotações…" data-c="notas">${e(t.notas || '')}</textarea>`}
+      <label class="det2-linha"><span>Repetir</span><select data-c="repetir">${REPETIR.map(([v, r]) => `<option value="${v}"${v === rep ? ' selected' : ''}>${r}</option>`).join('')}${rep === 'outro' ? `<option value="outro" selected>${e(rotuloRepetir(t.repetir))}</option>` : ''}</select></label>
+      <div class="det2-linha"><span>Etiquetas</span><button class="det2-etiquetas">${(t.etiquetas || []).length ? t.etiquetas.map((x) => `<i class="tag">#${e(x)}</i>`).join('') : '<i class="apagado">+</i>'}</button></div>
+      <div class="det2-linha"><span>Lembretes</span><button class="det2-lembrete">${t.lembrete ? '⏰ ' + e(curtoData(t.lembrete.slice(0, 10))) + ' ' + e(t.lembrete.slice(11, 16)) : '<i class="apagado">+</i>'}</button>
+        <input type="datetime-local" class="escondido" id="det2-lembrete" value="${e(t.lembrete || '')}"></div>
+      ${pomo ? `<div class="det2-linha"><span>Pomodoros</span><b class="det2-pomo"><i aria-hidden="true">🍅</i> ${pomo.feitos || 0}${pomo.meta ? '/' + pomo.meta : ''}</b></div>` : ''}
+      <p class="meta salvo">Salvo · aparece também no PC</p>`;
+    ligar(t);
   };
-  el.querySelectorAll('[data-c]').forEach((c) => (c.onchange = () => {
-    const v = c.value.trim();
-    mudarTarefa(id, (x) => {
-      const k = c.dataset.c;
-      if (k === 'etiquetas') x.etiquetas = v.split(/[,\s]+/).map((s) => s.replace(/^#/, '').toLowerCase()).filter(Boolean);
-      else if (k === 'repetir') { if (v !== 'outro') x.repetir = v || null; }
-      else x[k] = v || null;
-      if (k === 'hora' && v && !x.data) x.data = hoje();
+
+  const mudar = (fn) => { mudarTarefa(id, fn); desenhar(); };
+  function ligar(t) {
+    const tit = el.querySelector('.det2-titulo');
+    const crescer = () => { tit.style.height = 'auto'; tit.style.height = tit.scrollHeight + 'px'; };
+    setTimeout(crescer, 0);
+    tit.oninput = crescer;
+    tit.onchange = () => { const v = tit.value.trim(); if (v) mudarTarefa(id, (x) => { x.titulo = v; }); };
+    el.querySelector('.det2-voltar').onclick = () => fecharCamada();
+    el.querySelector('.det2-cabeca .circulo').onclick = () => { alternarFeita(id); desenhar(); };
+    el.querySelector('.det2-projeto').onclick = () => {
+      const nomes = projetos();
+      const resp = prompt('Projeto (deixe vazio para tirar):\n' + nomes.join(', '), t.projeto || '');
+      if (resp !== null) mudar((x) => { x.projeto = resp.trim() || null; });
+    };
+    el.querySelector('.det2-mais').onclick = () => {
+      if (confirm('Apagar esta tarefa?')) fecharCamada().then(() => apagarTarefa(id));
+    };
+    el.querySelector('[data-acao="data"]').onclick = () => abrirFolhaData(id, desenhar);
+    const prazo = el.querySelector('#det2-prazo');
+    prazo.onchange = () => mudar((x) => { x.prazo = prazo.value || null; });
+    el.querySelector('[data-acao="prazo"]').onclick = () => {
+      if (t.prazo && confirm('Tirar o prazo?')) { mudar((x) => { x.prazo = null; }); return; }
+      try { prazo.showPicker(); } catch (err) { prazo.click(); }
+    };
+    el.querySelector('[data-acao="importante"]').onclick = () => mudar((x) => { x.importante = !x.importante; });
+    // subtarefas
+    el.querySelectorAll('.det2-subs li[data-s]').forEach((li) => {
+      const sid = li.dataset.s;
+      li.querySelector('.circulo').onclick = () => mudar((x) => { x.subtarefas = (x.subtarefas || []).map((s) => (s.id === sid ? { ...s, feita: !s.feita } : s)); });
+      li.querySelector('.det2-tirar').onclick = () => mudar((x) => { x.subtarefas = (x.subtarefas || []).filter((s) => s.id !== sid); });
     });
-    if ((c.dataset.c === 'hora' || c.dataset.c === 'lembrete') && v) talvezPedirAvisos(T.lista[id]);
-  }));
-  // Tira a data e a hora de uma vez (vai para o PC como as outras mudanças).
-  el.querySelector('#det-sem-data').onclick = () => {
-    mudarTarefa(id, (x) => { x.data = null; x.hora = null; });
-    el.querySelector('[data-c="data"]').value = '';
-    el.querySelector('[data-c="hora"]').value = '';
-    avisar('Tarefa sem data.');
+    const nova = el.querySelector('.det2-nova input');
+    const addSub = () => {
+      const v = nova.value.trim();
+      nova.value = ''; // Enter e "change" chegam juntos: sem isso, a subtarefa entrava duas vezes
+      if (!v) return;
+      mudar((x) => { x.subtarefas = [...(x.subtarefas || []), { id: novoSubId(), titulo: v, feita: false }]; });
+      setTimeout(() => el.querySelector('.det2-nova input')?.focus(), 0);
+    };
+    nova.onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); addSub(); } };
+    nova.onchange = addSub;
+    // anotações e repetir
+    el.querySelectorAll('[data-c]').forEach((c) => (c.onchange = () => {
+      const v = c.value.trim();
+      mudarTarefa(id, (x) => {
+        if (c.dataset.c === 'repetir') { if (v !== 'outro') x.repetir = v || null; } else x[c.dataset.c] = v || null;
+      });
+    }));
+    el.querySelector('.det2-etiquetas').onclick = () => {
+      const resp = prompt('Etiquetas (separe com espaço ou vírgula):', (t.etiquetas || []).map((x) => '#' + x).join(' '));
+      if (resp !== null) mudar((x) => { x.etiquetas = resp.split(/[,\s]+/).map((s) => s.replace(/^#/, '').toLowerCase()).filter(Boolean); });
+    };
+    const lem = el.querySelector('#det2-lembrete');
+    lem.onchange = () => { mudar((x) => { x.lembrete = lem.value || null; }); if (lem.value) talvezPedirAvisos(T.lista[id]); };
+    el.querySelector('.det2-lembrete').onclick = () => {
+      if (t.lembrete && confirm('Tirar o lembrete?')) { mudar((x) => { x.lembrete = null; }); return; }
+      if (!lem.value) lem.value = `${t.data || hoje()}T09:00`;
+      try { lem.showPicker(); } catch (err) { lem.click(); }
+    };
+  }
+  desenhar();
+  abrirCheia(el);
+}
+
+/** A folha de data: frase ("toda segunda e sexta"), atalhos, calendário de 2 meses, hora, repetir e Salvar. */
+function abrirFolhaData(id, aoSalvar) {
+  const t = T.lista[id];
+  const sel = { data: t.data || null, hora: t.hora || null, repetir: t.repetir || null };
+  const prox = (n) => somaDias(hoje(), n);
+  const diaSemana = (s) => diaDe(s).getDay();
+  const proxSegunda = () => { let d = prox(1); while (diaSemana(d) !== 1) d = somaDias(d, 1); return d; };
+  const proxSabado = () => { let d = hoje(); while (diaSemana(d) !== 6) d = somaDias(d, 1); return d; };
+  const el = h('<div class="fdata"></div>');
+  const mes = (ano, m) => {
+    const primeiro = new Date(ano, m, 1), dias = new Date(ano, m + 1, 0).getDate();
+    let html = `<div class="fdata-mes">${['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][m]} ${ano}</div><div class="fdata-grade">`;
+    for (let i = 0; i < primeiro.getDay(); i++) html += '<span></span>';
+    for (let d = 1; d <= dias; d++) {
+      const s = `${ano}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const temTarefa = vivas().some((x) => !x.feita && x.data === s);
+      html += `<button data-dia="${s}" class="${s === sel.data ? 'escolhido' : ''}${s === hoje() ? ' hoje' : ''}${s < hoje() ? ' passado' : ''}">${d}${temTarefa ? '<i></i>' : ''}</button>`;
+    }
+    return html + '</div>';
   };
-  el.querySelector('#det-apagar').onclick = () => fecharCamada().then(() => apagarTarefa(id));
+  const desenhar = () => {
+    const base = diaDe(hoje());
+    const quando = sel.data ? curtoData(sel.data) + (sel.hora ? ' ' + sel.hora : '') : 'Sem data';
+    el.innerHTML = `
+      <div class="fdata-topo"><b>Data</b><span>${e(quando)}</span></div>
+      <input class="fdata-frase" placeholder="“toda segunda e sexta”, “dia 5 às 9h”…" aria-label="Escrever a data">
+      <div class="fdata-atalhos">
+        <button data-d="${hoje()}"><i class="ic menta">${diaDe(hoje()).getDate()}</i>Hoje<small>${DIAS_CURTOS[diaSemana(hoje())].toLowerCase()}</small></button>
+        <button data-d="${prox(1)}"><i class="ic mostarda">☀</i>Amanhã<small>${DIAS_CURTOS[diaSemana(prox(1))].toLowerCase()}</small></button>
+        <button data-d="${proxSegunda()}"><i class="ic violeta">→</i>Próxima semana<small>seg</small></button>
+        <button data-d="${proxSabado()}"><i class="ic">▭</i>Fim de semana<small>sáb (${curtoPrazo(proxSabado())})</small></button>
+        ${sel.data ? '<button data-d=""><i class="ic coral">⊘</i>Sem data<small></small></button>' : ''}
+      </div>
+      <div class="fdata-cal"><div class="fdata-semana">${['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((x) => `<span>${x}</span>`).join('')}</div>
+        ${mes(base.getFullYear(), base.getMonth())}${mes(new Date(base.getFullYear(), base.getMonth() + 1, 1).getFullYear(), (base.getMonth() + 1) % 12)}</div>
+      <label class="fdata-linha"><i>◷</i><span>${sel.hora ? 'Hora ' + e(sel.hora) : 'Adicionar hora'}</span><input type="time" value="${e(sel.hora || '')}" aria-label="Hora"></label>
+      <label class="fdata-linha"><i>↻</i><span>Repetir</span><select aria-label="Repetir">${REPETIR.map(([v, r]) => `<option value="${v}"${v === (typeof sel.repetir === 'string' ? sel.repetir : '') ? ' selected' : ''}>${r}</option>`).join('')}${sel.repetir && typeof sel.repetir !== 'string' ? `<option value="outro" selected>${e(rotuloRepetir(sel.repetir))}</option>` : ''}</select></label>
+      <div class="fdata-baixo"><button class="botao menta" id="fdata-salvar">Salvar</button></div>`;
+    el.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => { sel.data = b.dataset.d || null; if (!sel.data) sel.hora = null; desenhar(); }));
+    el.querySelectorAll('[data-dia]').forEach((b) => (b.onclick = () => { sel.data = b.dataset.dia; desenhar(); }));
+    const frase = el.querySelector('.fdata-frase');
+    frase.onchange = () => {
+      const r = lerTarefaRapida(frase.value, hoje());
+      if (!r.data && !r.hora && !r.repetir) { avisar('Não entendi essa data.'); return; }
+      if (r.data) sel.data = r.data;
+      if (r.hora) { sel.hora = r.hora; if (!sel.data) sel.data = hoje(); }
+      if (r.repetir) sel.repetir = r.repetir;
+      desenhar();
+    };
+    frase.onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); frase.onchange(); } };
+    const hora = el.querySelector('input[type="time"]');
+    hora.onchange = () => { sel.hora = hora.value || null; if (sel.hora && !sel.data) sel.data = hoje(); desenhar(); };
+    const repe = el.querySelector('select');
+    repe.onchange = () => { if (repe.value !== 'outro') sel.repetir = repe.value || null; };
+    el.querySelector('#fdata-salvar').onclick = () => {
+      mudarTarefa(id, (x) => { x.data = sel.data; x.hora = sel.data ? sel.hora : null; x.repetir = sel.repetir; });
+      if (sel.hora) talvezPedirAvisos(T.lista[id]);
+      fecharCamada().then(aoSalvar);
+    };
+  };
+  desenhar();
   abrirFolha(el);
 }
 
@@ -511,7 +643,12 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
       const r = await falaParaTexto(blob, { hoje: hoje(), projetos: projetos(), etiquetas: [], app: 'tracker', soTexto: !!soTexto });
       if (cancelado) return;
       el.classList.remove('pensando');
-      el.querySelector('#dit-txt').textContent = soTexto ? 'Confira o texto:' : (r.tarefas.length ? 'Confira as tarefas:' : 'Não achei tarefas nessa fala.');
+      // Nada de perder a fala: se a IA não achou tarefa, ela vira UMA nota para conferir (título + texto inteiro).
+      if (!soTexto && !r.tarefas.length && (r.texto || '').trim()) {
+        const txt = r.texto.trim();
+        r.tarefas = [{ titulo: txt.split(/(?<=[.!?])\s/)[0].slice(0, 70), notas: txt, data: null, hora: null, etiquetas: [], importante: false, frase: '' }];
+      }
+      el.querySelector('#dit-txt').textContent = soTexto ? 'Confira o texto:' : (r.tarefas.length ? 'Confira e edite antes de criar:' : 'Não ouvi nada nessa gravação.');
       const saida = el.querySelector('#dit-saida');
       saida.hidden = false;
       const salvarB = el.querySelector('#dit-salvar');
@@ -535,7 +672,11 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
           <div class="dit-quando-botoes"><button type="button" data-q="hoje">Hoje</button><button type="button" data-q="amanha">Amanhã</button><button type="button" data-q="data">Escolher data</button><button type="button" data-q="sem">Sem data</button></div>
           <input type="date" class="escondido" data-d="${i}">
         </div>`;
-        saida.innerHTML = r.tarefas.map((t, i) => `<label class="dit-tarefa"><input type="checkbox" checked data-i="${i}"><span><b>${e(t.titulo)}</b><small>${e([t.data && rotuloData(t.data, hoje()), t.hora, (projetoFixo || t.projeto) && '@' + (projetoFixo || t.projeto)].filter(Boolean).join(' · '))}</small></span></label>${pergunta(i)}`).join('') || `<p>${e(r.texto)}</p>`;
+        // Título e anotação de cada uma ficam editáveis antes de criar.
+        saida.innerHTML = r.tarefas.map((t, i) => `<div class="dit-tarefa"><input type="checkbox" checked data-i="${i}" aria-label="Criar esta tarefa"><span>
+          <input class="dit-titulo" data-t="${i}" value="${e(t.titulo)}" aria-label="Título da tarefa">
+          <small>${e([t.data && rotuloData(t.data, hoje()), t.hora, (projetoFixo || t.projeto) && '@' + (projetoFixo || t.projeto)].filter(Boolean).join(' · '))}</small>
+          <textarea class="dit-notas" data-n="${i}" rows="${t.notas ? 3 : 1}" placeholder="Anotação (opcional)" aria-label="Anotação">${e(t.notas || '')}</textarea></span></div>${pergunta(i)}`).join('') || `<p>${e(r.texto)}</p>`;
         const escolher = (i, data) => {
           quando[i] = { data };
           const box = saida.querySelector(`.dit-quando[data-i="${i}"]`);
@@ -570,7 +711,11 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
           const marcadas = [...saida.querySelectorAll('input:checked')].map((c) => Number(c.dataset.i));
           marcadas.forEach((i) => {
             const t = r.tarefas[i];
-            aoTarefas({ ...t, data: t.data || (quando[i] ? quando[i].data : null), projeto: projetoFixo || t.projeto || null });
+            const titulo = (saida.querySelector(`[data-t="${i}"]`)?.value || '').trim() || t.titulo;
+            const notas = (saida.querySelector(`[data-n="${i}"]`)?.value || '').trim() || null;
+            // Título mudado à mão: a frase da IA não vale mais (ela traria o título antigo).
+            const frase = titulo === t.titulo ? t.frase : '';
+            aoTarefas({ ...t, titulo, notas, frase, data: t.data || (quando[i] ? quando[i].data : null), projeto: projetoFixo || t.projeto || null });
           });
           fecharCamada();
           avisar(marcadas.length === 1 ? 'Tarefa criada.' : `${marcadas.length} tarefas criadas.`);

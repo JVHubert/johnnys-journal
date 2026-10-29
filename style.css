@@ -233,8 +233,11 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .parar i { width: 26px; height: 26px; border-radius: 6px; background: var(--violeta-t); }
 .dit-texto { width: 100%; text-align: left; margin-top: 10px; }
 .dit-tarefa { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--grade); }
-.dit-tarefa input { width: 22px; height: 22px; accent-color: var(--menta); margin-top: 2px; }
-.dit-tarefa span { display: flex; flex-direction: column; }
+.dit-tarefa input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--menta); margin-top: 12px; flex: none; }
+.dit-tarefa span { display: flex; flex-direction: column; flex: 1; gap: 4px; min-width: 0; }
+.dit-titulo { width: 100%; min-height: 44px; background: var(--elevado); border: 1px solid var(--borda-forte); border-radius: 10px; padding: 0 12px; font-weight: 600; outline: none; }
+.dit-titulo:focus, .dit-notas:focus { border-color: var(--menta); }
+.dit-notas { width: 100%; background: var(--base); border: 1px solid var(--borda); border-radius: 10px; padding: 8px 12px; resize: vertical; font-size: 14px; outline: none; }
 .dit-tarefa small { color: var(--sec); }
 /* "Para quando?" da tarefa ditada sem data (antes de criar) */
 .dit-quando { align-self: stretch; text-align: left; display: flex; flex-direction: column; gap: 8px; padding: 8px 0 12px 34px; border-bottom: 1px solid var(--grade); }
@@ -472,3 +475,65 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .trancado #trava { display: flex; }
 .trancado #app, .trancado .barra, .trancado #cheia, .trancado #folha, .trancado #veu { visibility: hidden; }
 .trava-titulo { font-size: 22px; font-weight: 700; margin: 0; }
+
+/* ---------- detalhe da tarefa (2.70, desenho 1b) ---------- */
+.det2 { padding-top: 10px; }
+.det2-topo { display: flex; align-items: center; gap: 10px; min-height: 52px; }
+.det2-voltar, .det2-mais { width: 44px; height: 44px; font-size: 26px; color: var(--sec); }
+.det2-projeto { flex: 1; text-align: left; color: var(--sec); display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.det2-projeto .ponto { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.det2-cabeca { display: flex; gap: 14px; align-items: flex-start; margin: 10px 0 18px; }
+.circulo.grande { margin: -6px -8px 0 -11px; }
+.circulo.grande::before { width: 26px; height: 26px; }
+.circulo.feito::before { background: var(--menta); border-color: var(--menta); }
+.det2-titulo { flex: 1; background: none; border: 0; resize: none; font-size: 25px; font-weight: 700; line-height: 1.25; padding: 0; outline: none; }
+.riscado { text-decoration: line-through; color: var(--apagado); }
+.det2-botoes { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--borda); }
+.det2-pil { min-height: 40px; padding: 0 14px; border: 1px solid var(--borda-forte); border-radius: 999px; font-weight: 600; }
+.det2-pil.prazo { color: var(--mostarda); }
+.det2-pil.prazo:not(.marcado) { color: var(--sec); font-weight: 500; }
+.det2-pil.importante { color: var(--sec); font-weight: 500; }
+.det2-pil.importante.ligado { background: var(--violeta); border-color: var(--violeta); color: var(--violeta-t); font-weight: 600; }
+.det2-subs { list-style: none; margin: 0 0 14px; padding: 0; }
+.det2-subs li { display: flex; align-items: center; gap: 14px; min-height: 52px; border-bottom: 1px solid var(--grade); }
+.det2-subs li span { flex: 1; }
+.det2-subs .circulo { margin: 0 -11px; }
+.det2-subs .circulo::before { width: 20px; height: 20px; }
+.det2-tirar { width: 36px; height: 36px; color: var(--apagado); font-size: 18px; }
+.det2-nova .mais { width: 22px; text-align: center; color: var(--menta); font-size: 22px; }
+.det2-nova input { flex: 1; background: none; border: 0; outline: none; min-height: 44px; }
+.det2-notas { width: 100%; background: var(--base); border: 1px solid var(--borda); border-radius: 14px; padding: 14px; resize: vertical; margin-bottom: 14px; }
+.det2-linha { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; border-bottom: 1px solid var(--borda); color: var(--sec); }
+.det2-linha select { background: none; border: 0; color: var(--sec); text-align: right; }
+.det2-linha button { min-height: 44px; display: flex; gap: 6px; align-items: center; justify-content: flex-end; color: var(--texto); }
+.det2-linha .tag { background: #1E2A1F; color: var(--menta); border-radius: 8px; padding: 3px 9px; font-style: normal; }
+.det2-linha .apagado { color: var(--sec); font-style: normal; font-size: 22px; }
+.det2-pomo { color: var(--coral); font-weight: 600; }
+.det2-pomo i { font-style: normal; }
+/* folha de data */
+.fdata-topo { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0 12px; }
+.fdata-topo b { font-size: 22px; } .fdata-topo span { font-weight: 600; }
+.fdata-frase { width: 100%; min-height: 48px; border-radius: 24px; border: 0; background: var(--elevado); padding: 0 18px; margin-bottom: 10px; outline: none; }
+.fdata-atalhos { background: var(--elevado); border-radius: 14px; overflow: hidden; margin-bottom: 10px; }
+.fdata-atalhos button { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 50px; padding: 0 14px; border-bottom: 1px solid var(--base); font-weight: 600; }
+.fdata-atalhos small { margin-left: auto; color: var(--sec); font-weight: 400; }
+.fdata-atalhos .ic { width: 24px; height: 24px; border: 1.5px solid currentColor; border-radius: 6px; display: grid; place-items: center; font-size: 11px; font-style: normal; color: var(--sec); }
+.fdata-atalhos .ic.menta { color: var(--menta); } .fdata-atalhos .ic.mostarda { color: var(--mostarda); border: 0; font-size: 18px; }
+.fdata-atalhos .ic.violeta { color: var(--violeta); } .fdata-atalhos .ic.coral { color: var(--coral); border: 0; font-size: 18px; }
+.fdata-cal { background: var(--elevado); border-radius: 14px; padding: 8px; margin-bottom: 10px; }
+.fdata-semana, .fdata-grade { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; }
+.fdata-semana span { color: var(--apagado); font-size: 12px; padding: 4px 0; }
+.fdata-mes { text-align: center; font-weight: 600; margin: 8px 0 4px; }
+.fdata-grade button { position: relative; height: 42px; border-radius: 50%; font-weight: 500; }
+.fdata-grade button.passado { color: var(--apagado); }
+.fdata-grade button.hoje { color: var(--menta); font-weight: 700; }
+.fdata-grade button.escolhido { background: var(--menta); color: var(--menta-t); }
+.fdata-grade button i { position: absolute; bottom: 4px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--sec); }
+.fdata-linha { display: flex; align-items: center; gap: 14px; min-height: 50px; padding: 0 14px; background: var(--elevado); border-radius: 12px; margin-bottom: 6px; color: var(--sec); position: relative; }
+.fdata-linha i { font-style: normal; width: 20px; text-align: center; }
+.fdata-linha span { flex: 1; }
+.fdata-linha input[type="time"] { position: absolute; inset: 0; opacity: 0; }
+.fdata-linha select { background: none; border: 0; color: var(--sec); }
+.fdata-baixo { display: flex; justify-content: flex-end; margin-top: 10px; }
+.fdata-baixo .botao { min-width: 120px; border-radius: 999px; }
+.det2-nova .mais { flex: none; }
