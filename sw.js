@@ -1,8 +1,8 @@
 // Guarda os arquivos no aparelho para o app abrir sem internet.
-// Aumente a versÃƒÆ’Ã‚Â£o a cada publicaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o para os celulares baixarem a nova.
-// Desde a 2.32.0 o celular e o PC tÃƒÆ’Ã‚Âªm o MESMO nÃƒÆ’Ã‚Âºmero de versÃƒÆ’Ã‚Â£o (ÃƒÆ’Ã‚Â© um app sÃƒÆ’Ã‚Â³): suba os dois juntos.
-const VERSAO = '2.72.0';
-const PUBLICADA = '2026-10-29T16:56'; // data e hora da publicaÃƒÂ§ÃƒÂ£o; mude junto com a VERSAO: aparece em Ajustes
+// Aumente a versÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o a cada publicaÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o para os celulares baixarem a nova.
+// Desde a 2.32.0 o celular e o PC tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âªm o MESMO nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºmero de versÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o (ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â© um app sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³): suba os dois juntos.
+const VERSAO = '2.73.0';
+const PUBLICADA = '2026-10-29T19:02'; // data e hora da publicaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o; mude junto com a VERSAO: aparece em Ajustes
 const CACHE = 'journal-' + VERSAO;
 const ARQUIVOS = [
   './',
@@ -26,7 +26,7 @@ self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
 });
 
-// Ajustes pergunta qual versÃƒÆ’Ã‚Â£o estÃƒÆ’Ã‚Â¡ rodando neste celular.
+// Ajustes pergunta qual versÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ rodando neste celular.
 self.addEventListener('message', (e) => {
   if (e.data === 'versao' && e.ports[0]) e.ports[0].postMessage({ versao: VERSAO, publicada: PUBLICADA });
 });
@@ -41,8 +41,8 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  if (!e.request.url.startsWith(self.location.origin)) return; // GitHub, serviÃƒÆ’Ã‚Â§o do Journal: sempre pela rede
-  // o plano muda toda semana: busca na rede primeiro e usa a cÃƒÆ’Ã‚Â³pia guardada sÃƒÆ’Ã‚Â³ sem internet
+  if (!e.request.url.startsWith(self.location.origin)) return; // GitHub, serviÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§o do Journal: sempre pela rede
+  // o plano muda toda semana: busca na rede primeiro e usa a cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³pia guardada sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³ sem internet
   if (e.request.url.includes('plano.enc.json')) {
     e.respondWith(
       fetch(e.request).then((r) => { const c = r.clone(); caches.open(CACHE).then((k) => k.put('plano.enc.json', c)); return r; })
@@ -53,12 +53,12 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true })
       .then((hit) => hit || fetch(e.request))
-      // sem a pÃƒÆ’Ã‚Â¡gina no cache e sem internet: entrega o app guardado em vez de uma tela vazia
+      // sem a pÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡gina no cache e sem internet: entrega o app guardado em vez de uma tela vazia
       .catch(() => (e.request.mode === 'navigate' ? caches.match('./') : Response.error())),
   );
 });
 
-// ---------- avisos (Web Push), mandados pelo serviÃƒÆ’Ã‚Â§o do Journal ----------
+// ---------- avisos (Web Push), mandados pelo serviÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§o do Journal ----------
 // O aviso chega com { titulo, corpo, url, tag, acoes: [{ acao, titulo, url }] }.
 self.addEventListener('push', (e) => {
   let a = {};
@@ -75,7 +75,7 @@ self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const acao = (d.acoes || []).find((x) => x.acao === e.action);
   if (acao) {
-    // "Concluir" e "Adiar 1h" resolvem direto no serviÃƒÆ’Ã‚Â§o, sem abrir o app.
+    // "Concluir" e "Adiar 1h" resolvem direto no serviÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§o, sem abrir o app.
     e.waitUntil(fetch(acao.url, { method: 'POST' }).catch(() => {}));
     return;
   }
