@@ -388,7 +388,9 @@ function abrirDetalhe(id) {
       <div class="det2-linha"><span>Etiquetas</span><button class="det2-etiquetas">${(t.etiquetas || []).length ? t.etiquetas.map((x) => `<i class="tag">#${e(x)}</i>`).join('') : '<i class="apagado">+</i>'}</button></div>
       <div class="det2-linha"><span>Lembretes</span><button class="det2-lembrete">${t.lembrete ? '⏰ ' + e(curtoData(t.lembrete.slice(0, 10))) + ' ' + e(t.lembrete.slice(11, 16)) : '<i class="apagado">+</i>'}</button>
         <input type="datetime-local" class="escondido" id="det2-lembrete" value="${e(t.lembrete || '')}"></div>
-      ${pomo ? `<div class="det2-linha"><span>Pomodoros</span><b class="det2-pomo"><i aria-hidden="true">🍅</i> ${pomo.feitos || 0}${pomo.meta ? '/' + pomo.meta : ''}</b></div>` : ''}
+      <div class="det2-linha"><span>Pomodoros</span><span class="det2-pomo"><i aria-hidden="true">🍅</i>
+        <button class="det2-passo" data-p="feitos-" aria-label="Um pomodoro a menos"${pomo?.feitos ? '' : ' disabled'}>−</button><b>${pomo?.feitos || 0}</b><button class="det2-passo" data-p="feitos+" aria-label="Contar um pomodoro">+</button>
+        <small>meta</small><button class="det2-passo" data-p="meta-" aria-label="Diminuir a meta"${pomo?.meta ? '' : ' disabled'}>−</button><b>${pomo?.meta || 0}</b><button class="det2-passo" data-p="meta+" aria-label="Aumentar a meta">+</button></span></div>
       <p class="meta salvo">Salvo · aparece também no PC</p>`;
     ligar(t);
   };
@@ -417,6 +419,12 @@ function abrirDetalhe(id) {
       if (t.prazo && confirm('Tirar o prazo?')) { mudar((x) => { x.prazo = null; }); return; }
       try { prazo.showPicker(); } catch (err) { prazo.click(); }
     };
+    el.querySelectorAll('[data-p]').forEach((b) => (b.onclick = () => mudar((x) => {
+      const [campo, sinal] = [b.dataset.p.slice(0, -1), b.dataset.p.slice(-1)];
+      const p = { meta: 0, feitos: 0, ...(x.pomodoros || {}) };
+      p[campo] = Math.max(0, (p[campo] || 0) + (sinal === '+' ? 1 : -1));
+      x.pomodoros = p.meta || p.feitos ? p : null;
+    })));
     el.querySelector('[data-acao="importante"]').onclick = () => mudar((x) => { x.importante = !x.importante; });
     // subtarefas
     el.querySelectorAll('.det2-subs li[data-s]').forEach((li) => {
@@ -460,7 +468,15 @@ function abrirDetalhe(id) {
 /** A folha de data: frase ("toda segunda e sexta"), atalhos, calendário de 2 meses, hora, repetir e Salvar. */
 function abrirFolhaData(id, aoSalvar) {
   const t = T.lista[id];
-  const sel = { data: t.data || null, hora: t.hora || null, repetir: t.repetir || null };
+  escolherData({ data: t.data, hora: t.hora, repetir: t.repetir }, (sel) => {
+    mudarTarefa(id, (x) => { x.data = sel.data; x.hora = sel.data ? sel.hora : null; x.repetir = sel.repetir; });
+    if (sel.hora) talvezPedirAvisos(T.lista[id]);
+    aoSalvar && aoSalvar();
+  });
+}
+/** A folha de data (desenho 1b), usada no detalhe da tarefa e no "Para quando?" do ditado. */
+function escolherData(inicial, aoSalvar) {
+  const sel = { data: inicial.data || null, hora: inicial.hora || null, repetir: inicial.repetir || null };
   const prox = (n) => somaDias(hoje(), n);
   const diaSemana = (s) => diaDe(s).getDay();
   const proxSegunda = () => { let d = prox(1); while (diaSemana(d) !== 1) d = somaDias(d, 1); return d; };
@@ -511,11 +527,7 @@ function abrirFolhaData(id, aoSalvar) {
     hora.onchange = () => { sel.hora = hora.value || null; if (sel.hora && !sel.data) sel.data = hoje(); desenhar(); };
     const repe = el.querySelector('select');
     repe.onchange = () => { if (repe.value !== 'outro') sel.repetir = repe.value || null; };
-    el.querySelector('#fdata-salvar').onclick = () => {
-      mudarTarefa(id, (x) => { x.data = sel.data; x.hora = sel.data ? sel.hora : null; x.repetir = sel.repetir; });
-      if (sel.hora) talvezPedirAvisos(T.lista[id]);
-      fecharCamada().then(aoSalvar);
-    };
+    el.querySelector('#fdata-salvar').onclick = () => fecharCamada().then(() => aoSalvar({ ...sel }));
   };
   desenhar();
   abrirFolha(el);
@@ -667,43 +679,27 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
           salvarB.textContent = (r.tarefas.length === 1 ? 'Criar a tarefa' : `Criar ${r.tarefas.length} tarefas`)
             + (salvarB.disabled ? ' (escolha o dia)' : '');
         };
+        // "Para quando?" abre a mesma folha de data do detalhe da tarefa (desenho 1b).
         const pergunta = (i) => r.tarefas[i].data ? '' : `<div class="dit-quando" data-i="${i}">
-          <span class="meta">Para quando?</span>
-          <div class="dit-quando-botoes"><button type="button" data-q="hoje">Hoje</button><button type="button" data-q="amanha">Amanhã</button><button type="button" data-q="data">Escolher data</button><button type="button" data-q="sem">Sem data</button></div>
-          <input type="date" class="escondido" data-d="${i}">
+          <button type="button" class="det2-pil dit-quando-botao">▣ Para quando?</button>
         </div>`;
         // Título e anotação de cada uma ficam editáveis antes de criar.
         saida.innerHTML = r.tarefas.map((t, i) => `<div class="dit-tarefa"><input type="checkbox" checked data-i="${i}" aria-label="Criar esta tarefa"><span>
           <input class="dit-titulo" data-t="${i}" value="${e(t.titulo)}" aria-label="Título da tarefa">
           <small>${e([t.data && rotuloData(t.data, hoje()), t.hora, (projetoFixo || t.projeto) && '@' + (projetoFixo || t.projeto)].filter(Boolean).join(' · '))}</small>
           <textarea class="dit-notas" data-n="${i}" rows="${t.notas ? 3 : 1}" placeholder="Anotação (opcional)" aria-label="Anotação">${e(t.notas || '')}</textarea></span></div>${pergunta(i)}`).join('') || `<p>${e(r.texto)}</p>`;
-        const escolher = (i, data) => {
-          quando[i] = { data };
-          const box = saida.querySelector(`.dit-quando[data-i="${i}"]`);
-          if (box) {
-            box.querySelector('.meta').textContent = 'Para quando? ' + (data ? rotuloData(data, hoje()) : 'sem data');
-            box.querySelectorAll('button').forEach((b) => {
-              const q = b.dataset.q;
-              const marcado = q === 'sem' ? data === null
-                : q === 'hoje' ? data === hoje()
-                : q === 'amanha' ? data === somaDias(hoje(), 1)
-                : !!data && data !== hoje() && data !== somaDias(hoje(), 1);
-              b.setAttribute('aria-pressed', String(marcado));
-            });
+        const escolher = (i, sel) => {
+          quando[i] = sel;
+          const b = saida.querySelector(`.dit-quando[data-i="${i}"] button`);
+          if (b) {
+            b.textContent = '▣ ' + (sel.data ? curtoData(sel.data) + (sel.hora ? ' ' + sel.hora : '') : 'Sem data');
+            b.classList.add('escolhido');
           }
           conferir();
         };
         saida.querySelectorAll('.dit-quando').forEach((box) => {
           const i = Number(box.dataset.i);
-          const campo = box.querySelector('input[type="date"]');
-          box.querySelectorAll('button').forEach((b) => (b.onclick = () => {
-            const q = b.dataset.q;
-            if (q === 'hoje') escolher(i, hoje());
-            else if (q === 'amanha') escolher(i, somaDias(hoje(), 1));
-            else if (q === 'sem') escolher(i, null);
-            else { campo.value = campo.value || hoje(); try { campo.showPicker(); } catch (err) { campo.click(); } }
-          }));
-          campo.onchange = () => { if (campo.value) escolher(i, campo.value); };
+          box.querySelector('button').onclick = () => escolherData(quando[i] || {}, (sel) => escolher(i, sel));
         });
         saida.querySelectorAll('input[type="checkbox"]').forEach((c) => (c.onchange = conferir));
         salvarB.hidden = !r.tarefas.length;
@@ -715,7 +711,8 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
             const notas = (saida.querySelector(`[data-n="${i}"]`)?.value || '').trim() || null;
             // Título mudado à mão: a frase da IA não vale mais (ela traria o título antigo).
             const frase = titulo === t.titulo ? t.frase : '';
-            aoTarefas({ ...t, titulo, notas, frase, data: t.data || (quando[i] ? quando[i].data : null), projeto: projetoFixo || t.projeto || null });
+            const q = quando[i] || {};
+            aoTarefas({ ...t, titulo, notas, frase, data: t.data || q.data || null, hora: t.hora || q.hora || null, repetir: q.repetir || t.repetir || null, projeto: projetoFixo || t.projeto || null });
           });
           fecharCamada();
           avisar(marcadas.length === 1 ? 'Tarefa criada.' : `${marcadas.length} tarefas criadas.`);
@@ -763,7 +760,7 @@ function ditarTarefas() {
     aoTarefas: (t) => {
       const r = lerTarefaRapida(t.frase || t.titulo, hoje());
       // A escolha de "Para quando?" vale como a data: data null (escolhida "Sem data") não vira a data da fala.
-      criarTarefa({ titulo: t.titulo || r.titulo, data: t.data === undefined ? r.data : t.data, hora: t.hora || r.hora, repetir: r.repetir, projeto: projetoAberto || t.projeto || r.projeto, etiquetas: t.etiquetas?.length ? t.etiquetas : r.etiquetas, importante: t.importante || r.importante, notas: t.notas });
+      criarTarefa({ titulo: t.titulo || r.titulo, data: t.data === undefined ? r.data : t.data, hora: t.hora || r.hora, repetir: t.repetir || r.repetir, projeto: projetoAberto || t.projeto || r.projeto, etiquetas: t.etiquetas?.length ? t.etiquetas : r.etiquetas, importante: t.importante || r.importante, notas: t.notas });
     },
   });
 }

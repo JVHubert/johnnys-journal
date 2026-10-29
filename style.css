@@ -537,3 +537,12 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .fdata-baixo { display: flex; justify-content: flex-end; margin-top: 10px; }
 .fdata-baixo .botao { min-width: 120px; border-radius: 999px; }
 .det2-nova .mais { flex: none; }
+/* pomodoros editáveis e "Para quando?" do ditado (2.71) */
+.det2-pomo { display: flex; align-items: center; gap: 8px; color: var(--texto); }
+.det2-pomo b { min-width: 1.2ch; text-align: center; color: var(--coral); }
+.det2-pomo small { color: var(--sec); margin-left: 6px; }
+.det2-passo { width: 32px; height: 32px; border: 1px solid var(--borda-forte); border-radius: 8px; color: var(--texto); }
+.dit-quando { padding: 4px 0 10px 34px; }
+.dit-quando-botao { color: var(--sec); font-weight: 500; }
+.dit-quando-botao.escolhido { color: var(--texto); font-weight: 600; border-color: var(--menta); }
+.det2-linha .det2-passo { justify-content: center; min-height: 32px; padding: 0; }
