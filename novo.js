@@ -395,7 +395,12 @@ function abrirDetalhe(id) {
     ligar(t);
   };
 
-  const mudar = (fn) => { mudarTarefa(id, fn); desenhar(); };
+  // Redesenha no lugar, sem a tela pular: guarda a rolagem e devolve depois (era o "glitch" do pomodoro).
+  const mudar = (fn) => {
+    const c = $('cheia'), y = c.scrollTop;
+    mudarTarefa(id, fn); desenhar();
+    c.scrollTop = y;
+  };
   function ligar(t) {
     const tit = el.querySelector('.det2-titulo');
     const crescer = () => { tit.style.height = 'auto'; tit.style.height = tit.scrollHeight + 'px'; };
@@ -416,8 +421,8 @@ function abrirDetalhe(id) {
     const prazo = el.querySelector('#det2-prazo');
     prazo.onchange = () => mudar((x) => { x.prazo = prazo.value || null; });
     el.querySelector('[data-acao="prazo"]').onclick = () => {
-      if (t.prazo && confirm('Tirar o prazo?')) { mudar((x) => { x.prazo = null; }); return; }
-      try { prazo.showPicker(); } catch (err) { prazo.click(); }
+      // O prazo usa a mesma folha de data (só o dia vale; "Sem data" tira o prazo).
+      escolherData({ data: t.prazo }, (sel) => mudar((x) => { x.prazo = sel.data || null; }));
     };
     el.querySelectorAll('[data-p]').forEach((b) => (b.onclick = () => mudar((x) => {
       const [campo, sinal] = [b.dataset.p.slice(0, -1), b.dataset.p.slice(-1)];
@@ -474,45 +479,71 @@ function abrirFolhaData(id, aoSalvar) {
     aoSalvar && aoSalvar();
   });
 }
-/** A folha de data (desenho 1b), usada no detalhe da tarefa e no "Para quando?" do ditado. */
+/** A folha de data (desenho 1b, no jeito do Todoist): frase, atalhos, calendário em semanas a partir de
+ *  hoje (rola só ele), e "Adicionar hora" / "Repetir" sempre à vista, sem precisar rolar a folha.
+ *  Tem camada própria (#folha-data), então abre por cima do detalhe, da tarefa nova e do ditado. */
+const MESES_LONGOS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 function escolherData(inicial, aoSalvar) {
   const sel = { data: inicial.data || null, hora: inicial.hora || null, repetir: inicial.repetir || null };
   const prox = (n) => somaDias(hoje(), n);
   const diaSemana = (s) => diaDe(s).getDay();
   const proxSegunda = () => { let d = prox(1); while (diaSemana(d) !== 1) d = somaDias(d, 1); return d; };
   const proxSabado = () => { let d = hoje(); while (diaSemana(d) !== 6) d = somaDias(d, 1); return d; };
+  // (o $ do app nunca devolve vazio: cria um elemento solto. Aqui precisa saber se a folha já existe.)
+  let f = document.getElementById('folha-data');
+  if (!f) {
+    document.body.insertAdjacentHTML('beforeend', '<div id="veu-data" class="veu-data" hidden></div><div class="folha folha-data" id="folha-data" hidden role="dialog" aria-modal="true"></div>');
+    f = document.getElementById('folha-data');
+  }
+  const veu = document.getElementById('veu-data');
   const el = h('<div class="fdata"></div>');
-  const mes = (ano, m) => {
-    const primeiro = new Date(ano, m, 1), dias = new Date(ano, m + 1, 0).getDate();
-    let html = `<div class="fdata-mes">${['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][m]} ${ano}</div><div class="fdata-grade">`;
-    for (let i = 0; i < primeiro.getDay(); i++) html += '<span></span>';
-    for (let d = 1; d <= dias; d++) {
-      const s = `${ano}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const temTarefa = vivas().some((x) => !x.feita && x.data === s);
-      html += `<button data-dia="${s}" class="${s === sel.data ? 'escolhido' : ''}${s === hoje() ? ' hoje' : ''}${s < hoje() ? ' passado' : ''}">${d}${temTarefa ? '<i></i>' : ''}</button>`;
+  const nTarefas = (s) => vivas().filter((x) => !x.feita && x.data === s).length;
+  // Semanas a partir do domingo desta semana, por uns 4 meses; o nome do mês entra quando ele muda.
+  const calendario = () => {
+    let d = somaDias(hoje(), -diaSemana(hoje()));
+    let html = '', mesAtual = diaDe(hoje()).getMonth();
+    for (let sem = 0; sem < 18; sem++) {
+      const linha = [];
+      for (let i = 0; i < 7; i++, d = somaDias(d, 1)) {
+        const dt = diaDe(d);
+        if (dt.getDate() === 1 && dt.getMonth() !== mesAtual) {
+          if (linha.length) { html += `<div class="fdata-grade">${linha.join('')}${'<span></span>'.repeat(7 - linha.length)}</div>`; linha.length = 0; }
+          mesAtual = dt.getMonth();
+          html += `<div class="fdata-mes">${MESES_LONGOS[mesAtual]} ${dt.getFullYear()}</div>`;
+          for (let k = 0; k < i; k++) linha.push('<span></span>');
+        }
+        linha.push(d < hoje() ? '<span></span>' : `<button data-dia="${d}" class="${d === sel.data ? 'escolhido' : ''}${d === hoje() ? ' hoje' : ''}">${dt.getDate()}${nTarefas(d) ? '<i></i>' : ''}</button>`);
+      }
+      html += `<div class="fdata-grade">${linha.join('')}</div>`;
     }
-    return html + '</div>';
+    return html;
   };
   const desenhar = () => {
-    const base = diaDe(hoje());
-    const quando = sel.data ? curtoData(sel.data) + (sel.hora ? ' ' + sel.hora : '') : 'Sem data';
+    const ref = sel.data || hoje();
+    const n = nTarefas(ref);
     el.innerHTML = `
-      <div class="fdata-topo"><b>Data</b><span>${e(quando)}</span></div>
+      <div class="fdata-topo"><b>Data</b><span>${sel.data ? e(curtoData(sel.data) + (sel.hora ? ' ' + sel.hora : '')) : 'Sem data'}</span></div>
       <input class="fdata-frase" placeholder="“toda segunda e sexta”, “dia 5 às 9h”…" aria-label="Escrever a data">
       <div class="fdata-atalhos">
         <button data-d="${hoje()}"><i class="ic menta">${diaDe(hoje()).getDate()}</i>Hoje<small>${DIAS_CURTOS[diaSemana(hoje())].toLowerCase()}</small></button>
         <button data-d="${prox(1)}"><i class="ic mostarda">☀</i>Amanhã<small>${DIAS_CURTOS[diaSemana(prox(1))].toLowerCase()}</small></button>
+        <button data-d="${proxSabado()}"><i class="ic">▭</i>Este fim de semana<small>sáb</small></button>
         <button data-d="${proxSegunda()}"><i class="ic violeta">→</i>Próxima semana<small>seg</small></button>
-        <button data-d="${proxSabado()}"><i class="ic">▭</i>Fim de semana<small>sáb (${curtoPrazo(proxSabado())})</small></button>
         ${sel.data ? '<button data-d=""><i class="ic coral">⊘</i>Sem data<small></small></button>' : ''}
       </div>
-      <div class="fdata-cal"><div class="fdata-semana">${['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((x) => `<span>${x}</span>`).join('')}</div>
-        ${mes(base.getFullYear(), base.getMonth())}${mes(new Date(base.getFullYear(), base.getMonth() + 1, 1).getFullYear(), (base.getMonth() + 1) % 12)}</div>
+      <div class="fdata-cal">
+        <div class="fdata-semana">${['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((x) => `<span>${x}</span>`).join('')}</div>
+        <div class="fdata-resumo">${e(curtoData(ref).toLowerCase())} · ${n} ${n === 1 ? 'tarefa' : 'tarefas'}</div>
+        <div class="fdata-rolagem">${calendario()}</div>
+      </div>
       <label class="fdata-linha"><i>◷</i><span>${sel.hora ? 'Hora ' + e(sel.hora) : 'Adicionar hora'}</span><input type="time" value="${e(sel.hora || '')}" aria-label="Hora"></label>
-      <label class="fdata-linha"><i>↻</i><span>Repetir</span><select aria-label="Repetir">${REPETIR.map(([v, r]) => `<option value="${v}"${v === (typeof sel.repetir === 'string' ? sel.repetir : '') ? ' selected' : ''}>${r}</option>`).join('')}${sel.repetir && typeof sel.repetir !== 'string' ? `<option value="outro" selected>${e(rotuloRepetir(sel.repetir))}</option>` : ''}</select></label>
+      <label class="fdata-linha"><i>↻</i><span>${sel.repetir ? e(rotuloRepetir(sel.repetir)) : 'Repetir'}</span><select aria-label="Repetir">${REPETIR.map(([v, r]) => `<option value="${v}"${v === (typeof sel.repetir === 'string' ? sel.repetir : '') ? ' selected' : ''}>${r}</option>`).join('')}${sel.repetir && typeof sel.repetir !== 'string' ? `<option value="outro" selected>${e(rotuloRepetir(sel.repetir))}</option>` : ''}</select></label>
       <div class="fdata-baixo"><button class="botao menta" id="fdata-salvar">Salvar</button></div>`;
+    const rol = el.querySelector('.fdata-rolagem');
+    const marcado = rol.querySelector('.escolhido');
+    if (marcado) setTimeout(() => { rol.scrollTop = Math.max(0, marcado.offsetTop - rol.offsetTop - 40); }, 0);
     el.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => { sel.data = b.dataset.d || null; if (!sel.data) sel.hora = null; desenhar(); }));
-    el.querySelectorAll('[data-dia]').forEach((b) => (b.onclick = () => { sel.data = b.dataset.dia; desenhar(); }));
+    el.querySelectorAll('[data-dia]').forEach((b) => (b.onclick = () => { const y = rol.scrollTop; sel.data = b.dataset.dia; desenhar(); el.querySelector('.fdata-rolagem').scrollTop = y; }));
     const frase = el.querySelector('.fdata-frase');
     frase.onchange = () => {
       const r = lerTarefaRapida(frase.value, hoje());
@@ -526,28 +557,40 @@ function escolherData(inicial, aoSalvar) {
     const hora = el.querySelector('input[type="time"]');
     hora.onchange = () => { sel.hora = hora.value || null; if (sel.hora && !sel.data) sel.data = hoje(); desenhar(); };
     const repe = el.querySelector('select');
-    repe.onchange = () => { if (repe.value !== 'outro') sel.repetir = repe.value || null; };
+    repe.onchange = () => { if (repe.value !== 'outro') sel.repetir = repe.value || null; if (sel.repetir && !sel.data) sel.data = hoje(); desenhar(); };
     el.querySelector('#fdata-salvar').onclick = () => fecharCamada().then(() => aoSalvar({ ...sel }));
   };
   desenhar();
-  abrirFolha(el);
+  f.innerHTML = '';
+  f.style.transition = ''; f.style.transform = '';
+  const alca = h('<div class="folha-alca" aria-hidden="true"></div>');
+  f.append(alca, el);
+  f.hidden = false; veu.hidden = false;
+  veu.onclick = fecharCamada;
+  arrastarParaFechar(f, alca);
+  abrirCamada(() => { f.hidden = true; veu.hidden = true; f.innerHTML = ''; });
 }
 
 // ---------- adicionar rápida (folha sobre o teclado) ----------
 function abrirNovaTarefa(pre = {}) {
-  const ajuste = { data: pre.data || null, hora: null, lembrete: null, projeto: pre.projeto || null };
-  const el = h(`<div class="rapida">
-    <div class="campo-rapido"><div class="espelho" aria-hidden="true"></div><input id="rap-texto" autocomplete="off" enterkeyhint="send" placeholder="Comprar fita amanhã 9h #casa"></div>
-    <div class="faixa-rola chips" id="rap-chips">
-      <button data-a="hoje">Hoje</button><button data-a="amanha">Amanhã</button>
-      <button data-a="data">Escolher data</button><button data-a="lembrete">Lembrete</button><button data-a="projeto">Projeto</button>
+  // 2.72, no jeito do Todoist: título, descrição, um botão só de data (abre a folha de data), lembrete,
+  // e o projeto embaixo. O que se escreve no título ("amanhã 9h", "#casa") continua valendo.
+  const ajuste = { data: pre.data || null, hora: null, repetir: null, lembrete: null, projeto: pre.projeto || null };
+  const el = h(`<div class="rapida rapida2">
+    <div class="campo-rapido"><div class="espelho" aria-hidden="true"></div><input id="rap-texto" autocomplete="off" enterkeyhint="send" placeholder="Nome da tarefa"></div>
+    <textarea id="rap-desc" rows="1" placeholder="Descrição" aria-label="Descrição"></textarea>
+    <div class="rap-chips" id="rap-chips">
+      <button class="det2-pil" data-a="data">▣ <span>Data</span></button>
+      <button class="det2-pil" data-a="lembrete" aria-label="Lembrete">⏰ <span>Lembrete</span></button>
     </div>
-    <input type="date" id="rap-data" class="escondido"><input type="datetime-local" id="rap-lembrete" class="escondido">
-    <div class="rap-baixo"><span class="meta" id="rap-resumo"></span>
+    <input type="datetime-local" id="rap-lembrete" class="escondido">
+    <div class="rap-baixo">
+      <button class="rap-projeto" data-a="projeto"><span id="rap-proj-nome">Sem projeto</span> ▾</button>
+      <span class="meta" id="rap-resumo"></span>
       <button class="redondo violeta" id="rap-mic" aria-label="Ditar">${ICONE_MIC}</button>
       <button class="redondo menta" id="rap-enviar" aria-label="Adicionar">➤</button></div>
   </div>`);
-  const inp = el.querySelector('#rap-texto'), esp = el.querySelector('.espelho');
+  const inp = el.querySelector('#rap-texto'), esp = el.querySelector('.espelho'), desc = el.querySelector('#rap-desc');
   const ler = () => lerTarefaRapida(inp.value, hoje());
   const atualizar = () => {
     const r = ler();
@@ -558,48 +601,52 @@ function abrirNovaTarefa(pre = {}) {
     }
     esp.innerHTML = html + e(inp.value.slice(i)) + ' ';
     esp.scrollLeft = inp.scrollLeft;
-    const data = ajuste.data && !r.data ? ajuste.data : (r.data || ajuste.data);
-    const hora = r.hora || ajuste.hora;
+    const data = r.data || ajuste.data, hora = r.hora || ajuste.hora, rep = r.repetir || ajuste.repetir;
+    const bData = el.querySelector('[data-a="data"]');
+    bData.querySelector('span').textContent = data ? curtoData(data) + (hora ? ' ' + hora : '') + (rep ? ' ↻' : '') : 'Data';
+    bData.classList.toggle('marcado', !!data);
+    const bLem = el.querySelector('[data-a="lembrete"]');
+    bLem.querySelector('span').textContent = ajuste.lembrete ? ajuste.lembrete.slice(11, 16) : 'Lembrete';
+    bLem.classList.toggle('marcado', !!ajuste.lembrete);
     const proj = r.projeto || ajuste.projeto;
-    const partes = [];
-    if (data) partes.push(rotuloData(data, hoje()).replace(/^./, (c) => c.toUpperCase()) + (hora ? ', ' + hora.replace(/^0/, '') : ''));
-    if (r.repetir) partes.push(rotuloRepetir(r.repetir));
-    if (ajuste.lembrete) partes.push('⏰ ' + ajuste.lembrete.slice(11));
-    if (proj) partes.push('@' + proj);
-    r.etiquetas.forEach((x) => partes.push('#' + x));
-    el.querySelector('#rap-resumo').textContent = partes.join(' · ');
-    el.querySelectorAll('#rap-chips button').forEach((b) => {
-      const a = b.dataset.a;
-      b.setAttribute('aria-pressed', String(a === 'hoje' ? data === hoje() : a === 'amanha' ? data === somaDias(hoje(), 1) : a === 'data' ? !!data && data !== hoje() && data !== somaDias(hoje(), 1) : a === 'lembrete' ? !!ajuste.lembrete : !!proj));
-    });
+    el.querySelector('#rap-proj-nome').textContent = proj ? '@' + proj : 'Sem projeto';
+    el.querySelector('#rap-resumo').textContent = r.etiquetas.map((x) => '#' + x).join(' ');
   };
   inp.oninput = atualizar;
   inp.onscroll = () => (esp.scrollLeft = inp.scrollLeft);
+  desc.oninput = () => { desc.style.height = 'auto'; desc.style.height = Math.min(desc.scrollHeight, 140) + 'px'; };
   const enviar = () => {
     const r = ler();
     if (!r.titulo) { inp.focus(); return; }
-    criarTarefa({ ...r, data: r.data || ajuste.data, hora: r.hora || ajuste.hora, projeto: r.projeto || ajuste.projeto, lembrete: ajuste.lembrete });
-    inp.value = ''; ajuste.lembrete = null; atualizar(); inp.focus();
+    criarTarefa({ ...r, data: r.data || ajuste.data, hora: r.hora || ajuste.hora, repetir: r.repetir || ajuste.repetir,
+      projeto: r.projeto || ajuste.projeto, lembrete: ajuste.lembrete, notas: desc.value.trim() || null });
+    inp.value = ''; desc.value = ''; desc.style.height = '';
+    Object.assign(ajuste, { lembrete: null, hora: null, repetir: null }); atualizar(); inp.focus();
     avisar('Anotada.');
   };
   inp.onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); enviar(); } };
   el.querySelector('#rap-enviar').onclick = enviar;
   el.querySelector('#rap-mic').onclick = () => fecharCamada().then(ditarTarefas);
-  const dataInp = el.querySelector('#rap-data'), lemInp = el.querySelector('#rap-lembrete');
-  dataInp.onchange = () => { ajuste.data = dataInp.value || null; atualizar(); };
+  const lemInp = el.querySelector('#rap-lembrete');
   lemInp.onchange = () => { ajuste.lembrete = lemInp.value || null; atualizar(); };
-  const abrirSeletor = (x) => { try { x.showPicker(); } catch (err) { x.click(); } };
   // O toque nos botões não tira o foco do campo: senão o teclado fecha e abre de novo e a folha "pula".
-  el.addEventListener('pointerdown', (ev) => { if (ev.target.closest('#rap-chips button, .escolher-projeto button')) ev.preventDefault(); });
-  el.querySelectorAll('#rap-chips button').forEach((b) => (b.onclick = () => {
+  el.addEventListener('pointerdown', (ev) => { if (ev.target.closest('.rap-chips button, .rap-projeto, .escolher-projeto button')) ev.preventDefault(); });
+  el.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => {
     const a = b.dataset.a;
-    if (a === 'hoje') ajuste.data = ajuste.data === hoje() ? null : hoje();
-    if (a === 'amanha') ajuste.data = ajuste.data === somaDias(hoje(), 1) ? null : somaDias(hoje(), 1);
-    if (a === 'data') abrirSeletor(dataInp);
-    if (a === 'lembrete') { if (ajuste.lembrete) ajuste.lembrete = null; else { lemInp.value = `${ajuste.data || hoje()}T09:00`; abrirSeletor(lemInp); } }
+    if (a === 'data') {
+      const r = ler();
+      escolherData({ data: r.data || ajuste.data, hora: r.hora || ajuste.hora, repetir: r.repetir || ajuste.repetir }, (sel) => {
+        Object.assign(ajuste, sel); atualizar(); setTimeout(() => inp.focus(), 50);
+      });
+      return;
+    }
+    if (a === 'lembrete') {
+      if (ajuste.lembrete) { ajuste.lembrete = null; atualizar(); return; }
+      lemInp.value = `${ajuste.data || hoje()}T09:00`;
+      try { lemInp.showPicker(); } catch (err) { lemInp.click(); }
+      return;
+    }
     if (a === 'projeto') escolherProjeto(ajuste.projeto, (p) => { ajuste.projeto = p; atualizar(); });
-    atualizar();
-    if (document.activeElement !== inp) inp.focus();
   }));
   abrirFolha(el);
   atualizar();
@@ -608,7 +655,7 @@ function abrirNovaTarefa(pre = {}) {
 function escolherProjeto(atualP, aoEscolher) {
   const nomes = projetos();
   const box = h(`<div class="escolher-projeto">${nomes.map((p) => `<button data-p="${e(p)}"${p === atualP ? ' aria-pressed="true"' : ''}><i class="quadrado" style="background:${corProjeto(p)}"></i>${e(p)}</button>`).join('')}<button data-p="">Sem projeto</button><button data-novo="1">+ Projeto novo</button></div>`);
-  const chips = document.querySelector('#rap-chips');
+  const chips = document.querySelector('.rap-baixo') || document.querySelector('#rap-chips');
   document.querySelector('.escolher-projeto')?.remove();
   chips.after(box);
   box.querySelectorAll('button').forEach((b) => (b.onclick = () => {
@@ -1835,3 +1882,32 @@ irPara(inicialTela && document.getElementById('tela-' + inicialTela) ? inicialTe
 seguirEndereco(location.hash);
 buscarLigacao().then(() => { renderNovo(); sincTarefas(); });
 enviarFotosPendentes();
+
+// ================= DESLIZAR PARA OS LADOS (2.72) =================
+// Deslizar o dedo para a esquerda/direita troca a aba de Tarefas (Hoje ↔ Próximos ↔ Sem data ↔ Projetos)
+// e o dia em Hábitos. Só conta um gesto bem horizontal, para não brigar com a rolagem da página.
+function aoDeslizar(el, paraEsquerda, paraDireita) {
+  if (!el) return;
+  let x0 = null, y0 = 0;
+  el.addEventListener('touchstart', (ev) => {
+    if (ev.touches.length !== 1 || ev.target.closest('input, textarea, select, .faixa-rola, .quadro-colunas')) { x0 = null; return; }
+    x0 = ev.touches[0].clientX; y0 = ev.touches[0].clientY;
+  }, { passive: true });
+  el.addEventListener('touchend', (ev) => {
+    if (x0 === null) return;
+    const dx = ev.changedTouches[0].clientX - x0, dy = ev.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+    if (dx < 0) paraEsquerda(); else paraDireita();
+  }, { passive: true });
+}
+{
+  const ordem = () => [...$('tar-abas').querySelectorAll('button')].map((b) => b.dataset.v);
+  const ir = (passo) => {
+    const o = ordem(), i = o.indexOf(vista);
+    const nova = o[Math.min(o.length - 1, Math.max(0, i + passo))];
+    if (nova && nova !== vista) { vista = nova; projetoAberto = null; renderTarefas(); }
+  };
+  aoDeslizar($('tela-tarefas') || $('tar-lista'), () => ir(1), () => ir(-1));
+  aoDeslizar($('hab-painel-hoje'), () => { if (!$('dia-prox').disabled) $('dia-prox').click(); }, () => { if (!$('dia-ant').disabled) $('dia-ant').click(); });
+}

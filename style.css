@@ -546,3 +546,35 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .dit-quando-botao { color: var(--sec); font-weight: 500; }
 .dit-quando-botao.escolhido { color: var(--texto); font-weight: 600; border-color: var(--menta); }
 .det2-linha .det2-passo { justify-content: center; min-height: 32px; padding: 0; }
+
+/* folha de data com camada própria e no jeito do Todoist (2.72) */
+.veu-data { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 48; }
+.folha.folha-data { z-index: 49; max-height: 94vh; padding-top: 4px; }
+.fdata-topo { margin-bottom: 8px; }
+.fdata-frase { min-height: 44px; margin-bottom: 8px; }
+.fdata-atalhos { margin-bottom: 8px; }
+.fdata-atalhos button { min-height: 44px; }
+.fdata-resumo { text-align: center; color: var(--sec); font-size: 13px; padding: 2px 0 4px; }
+.fdata-rolagem { height: 196px; overflow-y: auto; overscroll-behavior: contain; }
+.fdata-mes { text-align: center; font-weight: 700; margin: 6px 0 2px; font-size: 14px; }
+.fdata-grade button { height: 38px; }
+.fdata-cal { margin-bottom: 8px; padding: 6px 8px; }
+.fdata-linha { min-height: 46px; }
+.fdata-baixo { margin-top: 6px; }
+
+/* tarefa nova no jeito do Todoist (2.72) */
+.rapida2 #rap-desc { width: 100%; background: none; border: 0; outline: none; resize: none; color: var(--sec); margin: 2px 0 10px; padding: 0 4px; }
+.rapida2 .rap-chips { display: flex; gap: 8px; margin-bottom: 12px; }
+.rapida2 .rap-chips .det2-pil { color: var(--sec); font-weight: 500; }
+.rapida2 .rap-chips .det2-pil.marcado { color: var(--texto); border-color: var(--menta); font-weight: 600; }
+.rapida2 .rap-baixo { display: flex; align-items: center; gap: 10px; }
+.rap-projeto { min-height: 44px; color: var(--texto); font-weight: 600; padding: 0 4px; }
+.rapida2 #rap-resumo { flex: 1; text-align: right; }
+/* folha de data mais compacta: Salvar sempre à vista na tela do S24 */
+.folha.folha-data .fdata-atalhos button { min-height: 40px; }
+.folha.folha-data .fdata-rolagem { height: 164px; }
+.folha.folha-data .fdata-linha { min-height: 42px; margin-bottom: 4px; }
+.folha.folha-data .fdata-linha select { position: absolute; inset: 0; opacity: 0; }
+.folha.folha-data .fdata-frase { min-height: 42px; }
+.folha.folha-data .fdata-topo { margin: 0 0 6px; }
+.folha.folha-data .fdata-baixo { margin-top: 4px; }
