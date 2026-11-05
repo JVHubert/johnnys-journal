@@ -578,3 +578,23 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .folha.folha-data .fdata-frase { min-height: 42px; }
 .folha.folha-data .fdata-topo { margin: 0 0 6px; }
 .folha.folha-data .fdata-baixo { margin-top: 4px; }
+
+/* ---------- gravação: aviso, tela escura e lista em Ajustes ---------- */
+.grav-faixa { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin: 10px 0 0; padding: 10px 12px 4px; border-left: 3px solid var(--menta); background: var(--painel); border-radius: 0 12px 12px 0; font-size: 14px; line-height: 1.4; color: var(--sec); text-align: left; animation: grav-entra .3s ease-out; }
+.grav-faixa.alerta { border-left-color: var(--coral); color: var(--texto); background: rgba(239,122,107,.1); }
+.grav-faixa .link { min-height: 40px; font-size: 14px; }
+@keyframes grav-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.grav-escuro { position: fixed; inset: 0; z-index: 90; width: 100%; background: #000; color: var(--sec); display: grid; place-items: center; padding: 24px; animation: grav-apaga .9s ease-out; }
+@keyframes grav-apaga { from { opacity: 0; } to { opacity: 1; } }
+.ge-miolo { display: flex; flex-direction: column; align-items: center; gap: 18px; max-width: 280px; text-align: center; transition: transform 2s ease-in-out; }
+.ge-relogio { font-size: 58px; font-weight: 300; letter-spacing: .02em; color: #8d7a6f; font-variant-numeric: tabular-nums; line-height: 1; }
+.ge-linha { display: block; width: 200px; height: 2px; border-radius: 2px; background: var(--menta); transform: scaleX(.04); transition: transform .09s linear; }
+.ge-msg { font-size: 14px; line-height: 1.45; color: #8d7a6f; }
+.ge-msg.alerta { color: var(--coral); }
+.grav-escuro small { font-size: 12.5px; color: #8d7a6f; }
+.ent-enviar { display: block; margin: 6px auto 0; }
+.grav-item { display: flex; flex-direction: column; padding: 12px 0 4px; border-top: 1px solid var(--borda); }
+.grav-item small { color: var(--sec); font-size: 13.5px; }
+.grav-acoes { display: flex; flex-wrap: wrap; gap: 0 16px; }
+.grav-item audio { width: 100%; margin: 6px 0 8px; }
+@media (prefers-reduced-motion: reduce) { .grav-faixa, .grav-escuro { animation: none; } .ge-miolo, .ge-linha { transition: none; } }

@@ -189,6 +189,8 @@
         <button class="falar" id="ent-gravar" aria-pressed="false" hidden><span class="ponto"></span><span id="ent-gravar-txt">Gravar</span></button>
         <div class="onda mini" id="ent-onda" aria-hidden="true" hidden></div>
         <p class="aviso-mudo" id="ent-mudo" role="alert" hidden></p>
+        <button class="link ent-enviar" id="ent-enviar" hidden>Enviar um áudio do celular</button>
+        <input type="file" id="ent-arquivo" hidden accept="audio/*,video/mp4,.m4a,.mp3,.ogg,.opus,.wav,.aac,.3gp">
         <button class="falar" id="ent-falar" aria-pressed="false"><span class="ponto"></span><span id="ent-falar-txt">Falar</span></button>
         <p id="ent-dica" class="meta"></p>
         <div class="ent-botoes">
@@ -247,6 +249,9 @@
         <button class="link" id="groq-trocar" hidden>Trocar a chave</button>
       </div>
 
+      <h2 class="secao">Gravações neste celular</h2>
+      <div class="card" id="aj-gravacoes"></div>
+
       <h2 class="secao">Para onde vão os seus dados</h2>
       <div class="card dados-destino" id="aj-dados">
         <p>Quase tudo fica nos seus aparelhos. Isto é o que sai, e para onde:</p>
@@ -254,7 +259,7 @@
           <li><b>Hábitos, entrevistas, notas e fotos do celular:</b> backup no GitHub, num repositório privado. Lá ficam em texto aberto.</li>
           <li><b>Tarefas:</b> banco da Cloudflare, para ir e voltar entre o PC e o celular.</li>
           <li><b>Entrevista inteira</b> (para o tweet do dia e a cena da ilustração): IA da Cloudflare, que não usa o texto para treinar.</li>
-          <li><b>Áudio da entrevista:</b> Groq, com a sua chave, para virar texto.</li>
+          <li><b>Áudio da entrevista:</b> Groq, com a sua chave, para virar texto. A cópia que fica para transcrever de novo não sai do celular.</li>
           <li><b>Áudio do ditado de tarefas:</b> Cloudflare (se a cota grátis do dia acabar, Groq). O texto ditado vai ao DeepSeek, que separa as tarefas.</li>
           <li><b>Cena da ilustração</b> (uma frase em inglês, sem nomes): Pollinations, que desenha.</li>
           <li><b>Avisos:</b> saem da Cloudflare pelo serviço de avisos do Chrome (Google), cifrados.</li>
@@ -291,6 +296,7 @@
   <div id="lanche" role="status" hidden><span id="lanche-txt"></span><button id="lanche-acao">Desfazer</button></div>
   <script src="juntar.js"></script>
   <script src="habitos-lista.js"></script>
+  <script src="gravacao.js"></script>
   <script src="app.js"></script>
   <script type="module" src="novo.js"></script>
 </body>

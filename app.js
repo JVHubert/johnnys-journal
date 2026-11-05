@@ -324,11 +324,12 @@ function renderPasso() {
   $('ent-prox').textContent = ent.passo === temas.length - 1 ? 'Terminar' : ($('ent-resposta').value.trim() ? 'Próximo' : 'Pular');
   const temGroq = !!chaveGroq() && !!window.MediaRecorder;
   $('ent-gravar').hidden = !temGroq;
+  $('ent-enviar').hidden = !temGroq;
   $('ent-falar').hidden = temGroq || !SR;
   ultimoAudio = null;
   $('ent-gravar-txt').textContent = 'Gravar';
   $('ent-dica').textContent = temGroq
-    ? 'Toque em Gravar e fale à vontade, com pausas. Toque de novo para parar: o texto aparece em alguns segundos.'
+    ? 'Toque em Gravar e fale à vontade, com pausas. A tela fica acesa enquanto grava. Toque de novo para parar: o texto aparece em alguns segundos.'
     : SR ? 'Toque em Falar e conte. Toque de novo para parar.'
     : 'Para transcrever melhor, cole a chave do Groq no início da Entrevista. Por enquanto, use o microfone do teclado.';
 }
@@ -432,7 +433,7 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 // palavras da vida do JV: ajudam o Whisper a acertar nomes e termos
 const GROQ_CONTEXTO = 'Diário do JV, em português do Brasil. Nomes e termos: PM3, Localiza, Labs, Iara, Indaiatuba, Belo Horizonte, BH, Pipa, Fortaleza, México, TikTok, boombap, product owner, backlog.';
 const chaveGroq = () => { try { return localStorage.getItem(GROQ_CHAVE); } catch (e) { return null; } };
-let gravador = null, pedacos = [], ocupado = false, relogio = null, ultimoAudio = null;
+let gravador = null, gravacaoAtual = null, ocupado = false, relogio = null, ultimoAudio = null;
 
 function renderGroq() {
   const k = chaveGroq();
@@ -464,6 +465,7 @@ function travarNavegacao(sim) {
   ocupado = sim;
   $('ent-prox').disabled = sim; $('ent-voltar').disabled = sim || (ent && ent.passo === 0); $('ent-sair').disabled = sim;
   $('ent-encerrar').disabled = sim;
+  $('ent-enviar').hidden = sim || !chaveGroq();   // não dá para escolher arquivo enquanto grava ou transcreve
 }
 const tipoAudio = () => ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/ogg', 'audio/webm']
   .find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
@@ -511,17 +513,18 @@ async function comecarGravacao() {
   try { fluxo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
   catch (e) { avisar('Microfone bloqueado. Segure o ícone do Journal na tela inicial › Informações do app › Permissões › Microfone › Permitir.'); return; }
   const tipo = tipoAudio();
-  gravador = new MediaRecorder(fluxo, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : undefined);
-  pedacos = [];
-  gravador.ondataavailable = (e) => { if (e.data.size) pedacos.push(e.data); };
+  // gravacao.js: tela acesa, aviso e áudio guardado em pedaços neste celular
+  const g = JJG.gravar(fluxo, { mimeType: tipo, origem: ent && ent.modo === 'memoria' ? 'Memória: ' + ent.titulo : 'Entrevista', avisoEm: $('ent-mudo') });
+  gravacaoAtual = g;
+  gravador = g.rec;
   gravador.onstop = () => {
     pararMedidor();
     fluxo.getTracks().forEach((t) => t.stop());
     clearInterval(relogio);
-    ultimoAudio = new Blob(pedacos, { type: gravador.mimeType || tipo || 'audio/webm' });
+    ultimoAudio = g.blob();
     transcrever(ultimoAudio);
   };
-  gravador.start();
+  g.comecar();
   pararMedidor = medidorDeSom(fluxo, $('ent-onda'), $('ent-mudo'));
   travarNavegacao(true);
   const inicio = Date.now();
@@ -530,26 +533,42 @@ async function comecarGravacao() {
   mostra(); relogio = setInterval(mostra, 1000);
 }
 
+// Manda um pedaço de áudio para o Whisper do Groq e devolve o texto.
+async function groqTexto(audio, nome) {
+  const form = new FormData();
+  form.append('file', audio, nome);
+  form.append('model', 'whisper-large-v3-turbo');
+  form.append('language', 'pt');
+  form.append('response_format', 'json');
+  form.append('temperature', '0');
+  form.append('prompt', GROQ_CONTEXTO);
+  const r = await fetch(GROQ_URL, { method: 'POST', headers: { Authorization: `Bearer ${chaveGroq()}` }, body: form });
+  if (r.status === 401) throw new Error('chave');
+  if (r.status === 429) throw new Error('limite');
+  if (!r.ok) throw new Error('falha');
+  return ((await r.json()).text || '').trim();
+}
+
 async function transcrever(audio) {
+  travarNavegacao(true);
   $('ent-gravar').setAttribute('aria-pressed', 'false');
   $('ent-gravar').disabled = true;
-  $('ent-gravar-txt').textContent = 'Transcrevendo…';
+  $('ent-enviar').disabled = true;
+  const rotulo = $('ent-gravar-txt');
+  rotulo.textContent = 'Transcrevendo…';
   try {
-    const ext = /ogg/.test(audio.type) ? 'ogg' : 'webm';
-    const form = new FormData();
-    form.append('file', audio, `entrevista.${ext}`);
-    form.append('model', 'whisper-large-v3-turbo');
-    form.append('language', 'pt');
-    form.append('response_format', 'json');
-    form.append('temperature', '0');
-    form.append('prompt', GROQ_CONTEXTO);
-    const r = await fetch(GROQ_URL, { method: 'POST', headers: { Authorization: `Bearer ${chaveGroq()}` }, body: form });
-    if (r.status === 401) throw new Error('chave');
-    if (r.status === 429) throw new Error('limite');
-    if (!r.ok) throw new Error('falha');
-    const texto = ((await r.json()).text || '').trim();
+    // Arquivo enviado (tem nome) sempre vira partes em WAV: o formato dele pode não servir para a transcrição.
+    const res = await JJG.transcreverAudio(audio, groqTexto, {
+      sempreFatiar: !!audio.name,
+      aoProgresso: (fase, i, n) => { rotulo.textContent = fase === 'medindo' ? 'Conferindo o som…' : n > 1 ? `Transcrevendo parte ${i} de ${n}…` : 'Transcrevendo…'; },
+    });
+    let texto = (res.texto || '').trim();
+    // Sem conseguir medir o som: pelo menos marca onde a tela apagou.
+    if (res.semMedida && gravacaoAtual) gravacaoAtual.buracos.forEach((b) => { texto += `\n[a tela apagou de ${JJG.mmss(b.ini)} a ${JJG.mmss(b.fim)}: o microfone pode não ter ouvido]`; });
     if (!ent) return;   // saiu da entrevista enquanto transcrevia
     if (!texto) { avisar('Não ouvi nada nessa gravação. Tente de novo, mais perto do celular.'); return; }
+    if (res.mudos && res.mudos.length) avisar(res.mudos.length === 1 ? 'O microfone ficou mudo em um trecho. Marquei no texto.' : `O microfone ficou mudo em ${res.mudos.length} trechos. Marquei no texto.`);
+    if (gravacaoAtual) { gravacaoAtual.concluir('transcrita'); gravacaoAtual = null; }
     const area = $('ent-resposta');
     area.value = (area.value.trim() ? area.value.trim() + ' ' : '') + texto;
     ultimoAudio = null;
@@ -561,6 +580,7 @@ async function transcrever(audio) {
       : 'A transcrição falhou (internet?). Toque em Gravar para tentar de novo com o mesmo áudio.');
   } finally {
     $('ent-gravar').disabled = false;
+    $('ent-enviar').disabled = false;
     $('ent-gravar-txt').textContent = ultimoAudio ? 'Tentar transcrever de novo' : 'Gravar';
     travarNavegacao(false);
   }
@@ -570,6 +590,16 @@ $('ent-gravar').onclick = () => {
   if (gravador && gravador.state === 'recording') { gravador.stop(); return; }
   if (ultimoAudio) { transcrever(ultimoAudio); return; }   // a última tentativa falhou: reaproveita o áudio
   comecarGravacao();
+};
+// Áudio pronto do Gravador de Voz ou do WhatsApp: o jeito mais seguro para conversa longa.
+$('ent-enviar').onclick = () => $('ent-arquivo').click();
+$('ent-arquivo').onchange = () => {
+  const f = $('ent-arquivo').files[0];
+  $('ent-arquivo').value = '';
+  if (!f) return;
+  gravacaoAtual = null;
+  ultimoAudio = f;
+  transcrever(f);
 };
 
 $('ent-resposta').addEventListener('input', () => {
@@ -1096,6 +1126,7 @@ window.addEventListener('pageshow', (e) => { if (e.persisted) voltarDoSegundoPla
 renderTudo();
 renderSync();
 renderGroq();
+JJG.arrumarAoAbrir().then((n) => { if (n) avisar(n === 1 ? 'Uma gravação foi interrompida, mas o áudio está salvo em Ajustes.' : `${n} gravações foram interrompidas, mas o áudio está salvo em Ajustes.`); }).catch(() => {});
 sincronizar();
 const inicial = new URLSearchParams(location.search).get('tela');
 if (inicial) irPara(inicial);

@@ -675,9 +675,6 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
   try { fluxo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
   catch (err) { avisar('Microfone bloqueado. Segure o ícone do Journal na tela inicial › Informações do app › Permissões › Microfone › Permitir.'); return; }
   const tipo = tipoAudio();
-  const rec = new MediaRecorder(fluxo, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : undefined);
-  const pedacos = [];
-  rec.ondataavailable = (ev) => { if (ev.data.size) pedacos.push(ev.data); };
   const el = h(`<div class="ditando">
     <button class="link" id="dit-cancelar">Cancelar</button>
     <h2>${e(titulo)}</h2>
@@ -689,11 +686,14 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
     <button class="parar" id="dit-parar" aria-label="Parar"><i></i></button>
     <button class="botao menta grande" id="dit-salvar" hidden>Salvar</button>
   </div>`);
+  // gravacao.js: tela acesa, aviso e áudio guardado em pedaços neste celular
+  const g = JJG.gravar(fluxo, { mimeType: tipo, origem: soTexto ? 'Nota ditada' : 'Tarefas ditadas', avisoEm: el.querySelector('.aviso-mudo') });
+  const rec = g.rec;
   let cancelado = false, inicio = Date.now();
   const relogio = setInterval(() => { const s = Math.floor((Date.now() - inicio) / 1000); el.querySelector('#dit-relogio').textContent = `${Math.floor(s / 60)}:${pad(s % 60)}`; }, 500);
   const desligarMedidor = window.medidorDeSom(fluxo, el.querySelector('.onda'), el.querySelector('.aviso-mudo'));
   const terminar = () => { clearInterval(relogio); desligarMedidor(); el.querySelector('.onda').hidden = false; fluxo.getTracks().forEach((x) => x.stop()); };
-  abrirCheia(el, () => { cancelado = true; if (rec.state === 'recording') rec.stop(); terminar(); });
+  abrirCheia(el, () => { cancelado = true; if (rec.state === 'recording') rec.stop(); terminar(); g.cancelada(); });
   el.querySelector('#dit-cancelar').onclick = fecharCamada;
   rec.onstop = async () => {
     terminar();
@@ -702,9 +702,13 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
     el.querySelector('#dit-parar').hidden = true;
     el.querySelector('#dit-txt').textContent = 'Transcrevendo…';
     try {
-      const blob = new Blob(pedacos, { type: rec.mimeType || tipo || 'audio/webm' });
-      const r = await falaParaTexto(blob, { hoje: hoje(), projetos: projetos(), etiquetas: [], app: 'tracker', soTexto: !!soTexto });
+      const blob = g.blob();
+      // Só o texto: pode ser longo, então passa pela medição de som e vai em partes.
+      const r = soTexto
+        ? { texto: (await JJG.transcreverAudio(blob, enviarParaTexto)).texto, tarefas: [] }
+        : await falaParaTexto(blob, { hoje: hoje(), projetos: projetos(), etiquetas: [], app: 'tracker', soTexto: false });
       if (cancelado) return;
+      g.concluir('transcrita');
       el.classList.remove('pensando');
       // Nada de perder a fala: se a IA não achou tarefa, ela vira UMA nota para conferir (título + texto inteiro).
       if (!soTexto && !r.tarefas.length && (r.texto || '').trim()) {
@@ -776,7 +780,7 @@ async function gravarFala({ titulo, aoTexto, soTexto, aoTarefas }) {
     }
   };
   el.querySelector('#dit-parar').onclick = () => { if (rec.state === 'recording') rec.stop(); };
-  rec.start();
+  g.comecar();
 }
 // A transcrição da Cloudflare tem uma cota grátis por dia. Se ela acabar, o áudio vai para o Whisper
 // do Groq com a chave que já está no celular (a mesma do Gravar da entrevista); a separação das
@@ -794,7 +798,7 @@ async function falaParaTexto(blob, extra) {
 }
 async function textoPeloGroq(blob) {
   const form = new FormData();
-  form.append('file', blob, `ditado.${/ogg/.test(blob.type) ? 'ogg' : 'webm'}`);
+  form.append('file', blob, `ditado.${/wav/.test(blob.type) ? 'wav' : /ogg/.test(blob.type) ? 'ogg' : 'webm'}`);
   form.append('model', 'whisper-large-v3-turbo');
   form.append('language', 'pt');
   form.append('response_format', 'json');
@@ -804,6 +808,10 @@ async function textoPeloGroq(blob) {
   if (!r.ok) throw new Error(r.status === 401 ? 'o Groq recusou a chave' : r.status === 429 ? 'o Groq também chegou no limite por agora' : 'Groq ' + r.status);
   return ((await r.json()).text || '').trim();
 }
+// Um pedaço de áudio vira texto no serviço do Journal. Pedaço sem fala não é erro: só não tem texto.
+const enviarParaTexto = (blob) => falaParaTexto(blob, { hoje: hoje(), projetos: [], etiquetas: [], app: 'tracker', soTexto: true })
+  .then((r) => r.texto || '')
+  .catch((err) => { if (/Não ouvi nada/.test(err.message)) return ''; throw err; });
 const paraBase64 = (blob) => new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = falha; r.readAsDataURL(blob); });
 function ditarTarefas() {
   gravarFala({
@@ -1182,7 +1190,7 @@ function editarNota(n, fotoNova = null, comecarDitando = false) {
 function ditarNaNota(el, texto) {
   const painel = el.querySelector('.painel-ditado'), ferr = el.querySelector('.en-ferramentas');
   const estado = el.querySelector('.dit-estado'), dica = el.querySelector('.dit-dica');
-  let rec = null, fluxo = null, cancelado = false, desligar = () => {}, relogio = null;
+  let rec = null, g = null, fluxo = null, cancelado = false, desligar = () => {}, relogio = null;
   let comecarNaLinha = false;   // botão "Aa": o texto vem e o cursor fica numa linha nova
   const fechar = () => { clearInterval(relogio); desligar(); fluxo && fluxo.getTracks().forEach((x) => x.stop()); painel.hidden = true; ferr.hidden = false; };
   (async () => {
@@ -1190,9 +1198,9 @@ function ditarNaNota(el, texto) {
     catch (err) { avisar('Microfone bloqueado. Segure o ícone do Journal na tela inicial › Informações do app › Permissões › Microfone › Permitir.'); return; }
     if (cancelado) { fluxo.getTracks().forEach((x) => x.stop()); return; }
     const tipo = tipoAudio();
-    rec = new MediaRecorder(fluxo, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : undefined);
-    const pedacos = [];
-    rec.ondataavailable = (ev) => { if (ev.data.size) pedacos.push(ev.data); };
+    // gravacao.js: tela acesa, aviso e áudio guardado em pedaços neste celular
+    g = JJG.gravar(fluxo, { mimeType: tipo, origem: 'Nota ditada', avisoEm: painel.querySelector('.aviso-mudo') });
+    rec = g.rec;
     painel.hidden = false; ferr.hidden = true; painel.classList.remove('pensando');
     el.querySelector('[data-a="parar"]').hidden = false;
     dica.textContent = 'toque no quadrado para parar';
@@ -1208,9 +1216,12 @@ function ditarNaNota(el, texto) {
       el.querySelector('[data-a="parar"]').hidden = true;
       estado.textContent = 'Transcrevendo…'; dica.textContent = '';
       try {
-        const r = await falaParaTexto(new Blob(pedacos, { type: rec.mimeType || tipo || 'audio/webm' }), { hoje: hoje(), projetos: [], etiquetas: [], app: 'tracker', soTexto: true });
+        const r = await JJG.transcreverAudio(g.blob(), enviarParaTexto, {
+          aoProgresso: (fase, i, n) => { estado.textContent = fase === 'medindo' ? 'Conferindo o som…' : n > 1 ? `Transcrevendo parte ${i} de ${n}…` : 'Transcrevendo…'; },
+        });
         if (cancelado) return;
         const novo = (r.texto || '').trim();
+        g.concluir('transcrita');
         if (!novo) avisar('Não veio texto dessa gravação. Confira o microfone e tente de novo.');
         else {
           // Cada trecho ditado entra numa linha nova. Nota vazia: entra sozinho, sem linha em branco antes.
@@ -1227,13 +1238,13 @@ function ditarNaNota(el, texto) {
         setTimeout(fechar, 4000);
       }
     };
-    rec.start();
+    g.comecar();
   })();
   return {
     parar: () => { if (rec && rec.state === 'recording') rec.stop(); },
     // "Aa": para o ditado e, quando o texto chegar, deixa uma linha nova no fim com o cursor nela.
     escrever: () => { comecarNaLinha = true; if (rec && rec.state === 'recording') rec.stop(); },
-    cancelar: () => { cancelado = true; if (rec && rec.state === 'recording') rec.stop(); fechar(); },
+    cancelar: () => { cancelado = true; if (rec && rec.state === 'recording') rec.stop(); fechar(); if (g) g.cancelada(); },
     ouvindo: () => !!rec && rec.state === 'recording',
   };
 }
@@ -1666,8 +1677,72 @@ function renderAjTrava() {
   box.appendChild(h(`<p class="meta">Pede de novo quando o app volta depois de ${TRAVA_MINUTOS} minutos fora. Sem a digital, o PIN do celular também destrava.</p>`));
 }
 
+// Gravações guardadas neste celular: ouvir, transcrever de novo, baixar, apagar.
+const ESTADO_GRAVACAO = { gravando: 'Gravando agora', pronta: 'Ainda sem texto', interrompida: 'Interrompida, áudio salvo', transcrita: 'Transcrita' };
+async function renderAjGravacoes() {
+  const box = $('aj-gravacoes');
+  let lista;
+  try { lista = await JJG.listar(); }
+  catch (err) { box.innerHTML = '<p class="meta">Este navegador não deixou guardar gravações.</p>'; return; }
+  box.innerHTML = '<p class="meta">O áudio fica só neste celular. Gravação já transcrita some depois de 30 dias; as outras ficam até você apagar.</p>';
+  if (!lista.length) { box.appendChild(h('<p class="meta">Nenhuma gravação guardada.</p>')); return; }
+  for (const m of lista) {
+    const d = new Date(m.inicio);
+    const dur = JJG.mmss(((m.fim || m.ultimo || m.inicio) - m.inicio) / 1000);
+    const quando = `${pad(d.getDate())}/${pad(d.getMonth() + 1)} às ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const el = h(`<div class="grav-item">
+      <b>${e(m.origem || 'Gravação')}</b>
+      <small>${quando} · ${dur} · ${ESTADO_GRAVACAO[m.estado] || ''}</small>
+      <div class="grav-acoes"${m.estado === 'gravando' ? ' hidden' : ''}>
+        <button class="link" data-a="ouvir">Ouvir</button>
+        <button class="link" data-a="transcrever">Transcrever</button>
+        <button class="link" data-a="baixar">Baixar</button>
+        <button class="link apagado" data-a="apagar">Apagar</button>
+      </div>
+    </div>`);
+    el.querySelector('[data-a="ouvir"]').onclick = async (ev) => {
+      ev.currentTarget.hidden = true;
+      const a = document.createElement('audio');
+      a.controls = true; a.src = URL.createObjectURL(await JJG.audioDe(m.id));
+      el.appendChild(a); a.play().catch(() => {});
+    };
+    el.querySelector('[data-a="transcrever"]').onclick = async (ev) => {
+      const b = ev.currentTarget;
+      if (b.disabled) return;
+      b.disabled = true;
+      try {
+        const envia = chaveGroq() ? groqTexto : enviarParaTexto;
+        const r = await JJG.transcreverAudio(await JJG.audioDe(m.id), envia, {
+          aoProgresso: (fase, i, n) => { b.textContent = fase === 'medindo' ? 'Conferindo o som…' : n > 1 ? `Parte ${i} de ${n}…` : 'Transcrevendo…'; },
+        });
+        const texto = (r.texto || '').trim();
+        if (!texto) { avisar('Não veio texto dessa gravação.'); return; }
+        await JJG.marcar(m.id, 'transcrita');
+        // Vira uma nota para conferir: nada é salvo até você tocar em Salvar.
+        editarNota({ espaco: 'journal', titulo: `${m.origem || 'Gravação'} (${pad(d.getDate())}/${pad(d.getMonth() + 1)})`, texto });
+      } catch (err) {
+        avisar('Não consegui transcrever (' + (err.message === 'limite' ? 'limite do Groq por agora; tente em alguns minutos' : err.message === 'chave' ? 'o Groq recusou a chave' : err.message) + ').');
+      } finally { b.disabled = false; b.textContent = 'Transcrever'; }
+    };
+    el.querySelector('[data-a="baixar"]').onclick = async () => {
+      const blob = await JJG.audioDe(m.id);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `gravacao-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.${/ogg/.test(m.tipo) ? 'ogg' : 'webm'}`;
+      a.click();
+    };
+    el.querySelector('[data-a="apagar"]').onclick = async () => {
+      if (!confirm('Apagar esta gravação do celular? O áudio não volta.')) return;
+      await JJG.apagar(m.id);
+      renderAjGravacoes();
+    };
+    box.appendChild(el);
+  }
+}
+
 async function renderAjustes() {
   renderAjTrava();
+  renderAjGravacoes();
   const ini = $('aj-inicio'); ini.innerHTML = '';
   [['contadores', 'Contadores'], ['lua', 'Fase da Lua'], ['hoje', 'Tarefas de hoje'], ['habitos', 'Hábitos que faltam'], ['neste', 'Neste dia'], ['entrevista', 'Atalho da entrevista']]
     .forEach(([k, r]) => ini.appendChild(chave2(r, prefs[k], (v) => { prefs[k] = v; gravarLS('jj-inicio', prefs); renderInicio(); })));

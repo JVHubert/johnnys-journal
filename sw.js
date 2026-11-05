@@ -1,8 +1,8 @@
 // Guarda os arquivos no aparelho para o app abrir sem internet.
 // Aumente a versÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o a cada publicaÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o para os celulares baixarem a nova.
 // Desde a 2.32.0 o celular e o PC tÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âªm o MESMO nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âºmero de versÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o (ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â© um app sÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³): suba os dois juntos.
-const VERSAO = '2.80.0';
-const PUBLICADA = '2026-11-05T09:10'; // data e hora da publicaÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o; mude junto com a VERSAO: aparece em Ajustes
+const VERSAO = '2.81.0';
+const PUBLICADA = '2026-11-05T09:45'; // data e hora da publicaÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o; mude junto com a VERSAO: aparece em Ajustes
 const CACHE = 'journal-' + VERSAO;
 const ARQUIVOS = [
   './',
@@ -11,6 +11,7 @@ const ARQUIVOS = [
   'app.js',
   'juntar.js',
   'habitos-lista.js',
+  'gravacao.js',
   'novo.js',
   'datas.js',
   'astro.js',
