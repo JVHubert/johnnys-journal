@@ -149,15 +149,18 @@ async function sincTarefas() {
   sincRodando = true;
   try {
     const enviadas = Object.keys(T.pend).map((id) => T.lista[id]).filter(Boolean);
-    const r = await nuvem('/tarefas/sincronizar', { desde: T.desde, mudancas: enviadas });
+    // `relatos`: o que deu errado aqui e a nuvem não veria sozinha (backup no GitHub).
+    const r = await nuvem('/tarefas/sincronizar', { aparelho: 'celular', desde: T.desde, mudancas: enviadas, relatos: { backup: lerLS('jj-saude-backup') } });
     const mandadas = new Map(enviadas.map((t) => [t.id, t.mudou]));
     for (const x of r.tarefas || []) {
       const local = T.lista[x.id];
       if (local && (local.mudou || 0) >= x.mudou) continue; // a daqui é a mais nova
       T.lista[x.id] = x;
     }
-    for (const [id, m] of mandadas) if (T.lista[id] && T.lista[id].mudou === m) delete T.pend[id];
-    T.desde = r.desde; T.quando = Date.now(); T.erro = null;
+    // Tarefa recusada pela nuvem continua pendente e vai de novo na próxima troca.
+    const fora = new Set((r.recusadas || []).map((x) => x.id));
+    for (const [id, m] of mandadas) if (!fora.has(id) && T.lista[id] && T.lista[id].mudou === m) delete T.pend[id];
+    T.desde = r.desde; T.quando = Date.now(); T.erro = null; T.fora = fora.size;
     salvarT();
     renderTarefas(); renderInicio();
   } catch (err) {
@@ -248,7 +251,8 @@ function renderSinc() {
   let txt;
   if (DEMO) txt = 'atualizado há 2 min';
   else if (semLig) txt = 'não ligado';
-  else if (T.erro && T.erro !== 'sem-ligacao') txt = 'sem internet';
+  else if (T.erro && T.erro !== 'sem-ligacao') txt = /failed|network|fetch/i.test(T.erro) ? 'sem internet' : 'falhou: ' + T.erro;
+  else if (T.fora) txt = T.fora + (T.fora > 1 ? ' tarefas não foram' : ' tarefa não foi');
   else if (!T.quando) txt = 'ligando…';
   else { const m = Math.floor((Date.now() - T.quando) / 60000); txt = m < 1 ? 'atualizado agora' : `atualizado há ${m} min`; }
   $('tar-sinc-txt').textContent = txt;

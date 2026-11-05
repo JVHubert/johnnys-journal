@@ -942,6 +942,15 @@ function b64Utf8(s) {
 const utf8B64 = (s) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, '')), (c) => c.charCodeAt(0)));
 
 function statusSync(txt) { $('sync-status').textContent = txt; }
+// Backup com problema: fica anotado e vai para a nuvem na próxima troca de tarefas; depois de 30 minutos a
+// nuvem avisa no celular e no Telegram. Sem internet não conta (e não apaga o que já estava anotado).
+function anotarProblemaDoBackup(erro) {
+  try {
+    if (!erro) { localStorage.removeItem('jj-saude-backup'); return; }
+    const antes = JSON.parse(localStorage.getItem('jj-saude-backup') || 'null');
+    localStorage.setItem('jj-saude-backup', JSON.stringify({ desde: (antes && antes.desde) || Date.now(), erro }));
+  } catch (e) { /* segue */ }
+}
 function agendarSync() {
   if (DEMO || !token()) return;
   clearTimeout(syncTimer);
@@ -999,10 +1008,14 @@ async function sincronizar() {
     if (!ok) throw new Error('conflito');
     const h = new Date();
     gravarPendentes(lerPendentes() - pendentesNoInicio);
+    anotarProblemaDoBackup(null);
     statusSync(`Backup feito às ${pad(h.getHours())}:${pad(h.getMinutes())}.`);
     if (window.aoSincronizar) window.aoSincronizar();
     return 'ok';
   } catch (e) {
+    if (e.message === 'token') anotarProblemaDoBackup('o GitHub recusou o token (venceu?). Cole um token novo em Ajustes.');
+    else if (e.message === 'conflito') anotarProblemaDoBackup('não consegui gravar o backup depois de 3 tentativas.');
+    else if (e.message === 'rede') anotarProblemaDoBackup('o GitHub respondeu com erro ao gravar o backup.');
     const n = lerPendentes();
     const espera = n ? ` ${n} ${n === 1 ? 'mudança esperando' : 'mudanças esperando'} envio.` : '';
     statusSync((e.message === 'token' ? 'O GitHub recusou o token. Cole um token novo.' : e.message === 'conflito' ? 'Não consegui gravar o backup. Toque em Sincronizar agora.' : 'Sem internet agora: tento de novo depois.') + espera);

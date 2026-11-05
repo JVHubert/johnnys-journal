@@ -1,8 +1,8 @@
 // Guarda os arquivos no aparelho para o app abrir sem internet.
 // Aumente a versÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o a cada publicaÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o para os celulares baixarem a nova.
 // Desde a 2.32.0 o celular e o PC tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âªm o MESMO nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºmero de versÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o (ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â© um app sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³): suba os dois juntos.
-const VERSAO = '2.74.0';
-const PUBLICADA = '2026-11-04T20:41'; // data e hora da publicaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o; mude junto com a VERSAO: aparece em Ajustes
+const VERSAO = '2.75.0';
+const PUBLICADA = '2026-11-04T21:06'; // data e hora da publicaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o; mude junto com a VERSAO: aparece em Ajustes
 const CACHE = 'journal-' + VERSAO;
 const ARQUIVOS = [
   './',
