@@ -474,6 +474,35 @@ function abrirDetalhe(id) {
   abrirCheia(el);
 }
 
+/** Folha "Reagendar" (abre ao tocar no aviso de uma tarefa): Daqui 1h, Hoje à noite, Amanhã, Próxima segunda ou Escolher data. */
+function abrirReagendar(id) {
+  const t0 = T.lista[id];
+  if (!t0) return;
+  const p2 = (n) => String(n).padStart(2, '0');
+  const momento = (min) => { const d = new Date(Date.now() + min * 60000); return `${chave(d)}T${p2(d.getHours())}:${p2(d.getMinutes())}`; };
+  const amanha = somaDias(hoje(), 1);
+  let seg = amanha; while (diaDe(seg).getDay() !== 1) seg = somaDias(seg, 1);
+  const noite = new Date().getHours() < 19;
+  const opcoes = [
+    ['Daqui 1 hora', momento(60).slice(11), (x) => { x.lembrete = momento(60); }],
+    noite && ['Hoje à noite', '19:00', (x) => { x.lembrete = hoje() + 'T19:00'; }],
+    ['Amanhã', diaDe(amanha).toLocaleDateString('pt-BR', { weekday: 'short' }), (x) => { x.data = amanha; x.lembrete = null; }],
+    ['Próxima segunda', diaDe(seg).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }), (x) => { x.data = seg; x.lembrete = null; }],
+  ].filter(Boolean);
+  const el = h(`<div class="reagendar"><h2>Reagendar</h2><p class="meta">${e(t0.titulo)}</p>
+    <div class="fdata-atalhos">${opcoes.map((o, i) => `<button data-i="${i}"><span>${o[0]}</span><small>${e(o[1])}</small></button>`).join('')}<button data-i="data"><span>Escolher data…</span></button></div></div>`);
+  el.querySelectorAll('button').forEach((b) => {
+    b.onclick = () => {
+      if (b.dataset.i === 'data') { fecharCamada(); abrirFolhaData(id); return; }
+      const antes = { ...T.lista[id] };
+      mudarTarefa(id, opcoes[+b.dataset.i][2]);
+      fecharCamada();
+      lanche('Tarefa reagendada.', () => mudarTarefa(id, (x) => { x.data = antes.data; x.lembrete = antes.lembrete; }));
+    };
+  });
+  abrirFolha(el);
+}
+
 /** A folha de data: frase ("toda segunda e sexta"), atalhos, calendário de 2 meses, hora, repetir e Salvar. */
 function abrirFolhaData(id, aoSalvar) {
   const t = T.lista[id];
@@ -1465,6 +1494,114 @@ function abrirIlustracao(k) {
 }
 window.abrirIlustracao = abrirIlustracao;
 
+// ================= BOLETIM DO JV11 + "SEU DIA" =================
+// O botão "Abrir o boletim" do Telegram abre o Journal em #boletim=<data>&k=<chave>. O boletim (a página do JV11)
+// aparece aqui dentro; ao chegar perto do fim, sobe a folha "Seu dia" (tarefas de hoje e hábitos que faltam).
+const JV11_URL = 'https://jv11-news.jvhubert.workers.dev';
+const chaveJv11 = () => (lerLS('jj-jv11', null) || {}).k || null;
+let jv11Hoje = lerLS('jj-jv11-hoje', null); // { data, minutos, manchete }
+let buscandoJv11 = false;
+async function atualizarJv11() {
+  if (buscandoJv11 || DEMO) return;
+  const k = chaveJv11();
+  if (!k || (jv11Hoje && jv11Hoje.quando && Date.now() - jv11Hoje.quando < 3600_000 && jv11Hoje.data === hoje())) return;
+  buscandoJv11 = true;
+  try {
+    const r = await fetch(`${JV11_URL}/b/hoje.json?k=${encodeURIComponent(k)}`);
+    if (r.ok) { const j = await r.json(); jv11Hoje = { ...j, quando: Date.now() }; gravarLS('jj-jv11-hoje', jv11Hoje); renderInicio(); }
+  } catch (err) { /* sem internet: fica o que já tinha */ }
+  buscandoJv11 = false;
+}
+
+/** Chips dos hábitos que faltam hoje (Início e "Seu dia"). `aoMudar` redesenha quem chamou. */
+function chipsDeHabitos(box, aoMudar, antesDeIr) {
+  const k = hoje();
+  box.innerHTML = '';
+  const faltam = HABITOS.filter((x) => ativo(x, k) && !['ok', 'na'].includes(estado(x, k)));
+  if (!faltam.length) box.appendChild(h('<p class="meta">Todos marcados hoje.</p>'));
+  faltam.forEach((x) => {
+    // Água e PM3 têm quantidade: o toque abre a tela Hábitos de hoje para marcar lá.
+    const b = h(`<button class="chip-habito"><i class="caixa"></i>${e(x.curto)}</button>`);
+    b.onclick = async () => {
+      if (x.tipo) { if (antesDeIr) await antesDeIr(); atual = k; irPara('habitos'); mostrarPainelHab('hoje'); return; }
+      const r = dia(k);
+      r.h[x.id] = true;
+      salvar(); aoMudar(); renderInicio();
+      lanche(`${x.curto}: feito`, () => { const r2 = dia(k); delete r2.h[x.id]; salvar(); aoMudar(); renderInicio(); });
+    };
+    box.appendChild(b);
+  });
+}
+
+const fecharTodasCamadas = async () => { while (camadas.length) await fecharCamada(); };
+
+function abrirSeuDia() {
+  if (document.querySelector('.seu-dia')) return;
+  const k = hoje();
+  const el = h(`<div class="seu-dia"><h2>Seu dia</h2><p class="meta" id="sd-resumo"></p>
+    <div class="card" id="sd-tarefas-box"><div id="sd-tarefas"></div></div>
+    <h2 class="secao">Hábitos que faltam</h2><div class="chips-habito" id="sd-habitos"></div>
+    <button class="botao violeta grande" id="sd-entrevista">Fazer a entrevista de hoje</button>
+    <button class="botao grande" id="sd-inicio">Ir para o Início</button></div>`);
+  const desenhar = () => {
+    const lista = vivas().filter((t) => !t.feita && t.data && t.data <= k).sort((a, b) => (atrasada(b) - atrasada(a)) || ordenar(a, b));
+    const box = el.querySelector('#sd-tarefas'); box.innerHTML = '';
+    if (!lista.length) box.appendChild(vazio('Nada para hoje.'));
+    lista.slice(0, 6).forEach((t) => box.appendChild(linhaTarefa(t)));
+    if (lista.length > 6) box.appendChild(h(`<p class="meta" style="padding:8px 14px">e mais ${lista.length - 6} em Tarefas</p>`));
+    const faltam = HABITOS.filter((x) => ativo(x, k) && !['ok', 'na'].includes(estado(x, k))).length;
+    el.querySelector('#sd-resumo').textContent = `${lista.length} ${lista.length === 1 ? 'tarefa' : 'tarefas'} para hoje · ${faltam} ${faltam === 1 ? 'hábito' : 'hábitos'} para marcar`;
+    chipsDeHabitos(el.querySelector('#sd-habitos'), desenhar, fecharTodasCamadas);
+  };
+  desenhar();
+  el.querySelector('#sd-entrevista').onclick = async () => { await fecharTodasCamadas(); irPara('inicio'); abrirEntrevistaDeHoje(); };
+  el.querySelector('#sd-inicio').onclick = async () => { await fecharTodasCamadas(); irPara('inicio'); };
+  abrirFolha(el);
+}
+
+function abrirBoletim(data) {
+  const k = chaveJv11();
+  if (!k) { avisar('Falta a chave do JV11. Toque em "Abrir o boletim" no Telegram.'); return; }
+  const mins = jv11Hoje && jv11Hoje.data === data && jv11Hoje.minutos ? `${jv11Hoje.minutos} min` : '';
+  const el = h(`<div class="boletim">
+    <div class="bol-topo"><button class="bol-fechar" aria-label="Fechar o boletim">‹</button><b>JV11</b><small>${e(mins)}</small><button class="bol-dia">Seu dia</button></div>
+    <div class="bol-barra"><i></i></div>
+    <iframe class="bol-quadro" title="Boletim do JV11" src="${JV11_URL}/b/${encodeURIComponent(data)}?k=${encodeURIComponent(k)}&de=journal"></iframe></div>`);
+  el.querySelector('.bol-fechar').onclick = () => fecharCamada();
+  el.querySelector('.bol-dia').onclick = () => abrirSeuDia();
+  abrirCheia(el);
+}
+let seuDiaAbertoEm = null;
+window.addEventListener('message', (ev) => {
+  if (ev.origin !== JV11_URL || !ev.data || !ev.data.jv11) return;
+  if (ev.data.jv11 === 'progresso') {
+    const barra = document.querySelector('.bol-barra i');
+    if (!barra) return;
+    const v = Math.min(1, Math.max(0, Number(ev.data.v) || 0));
+    barra.style.setProperty('--v', v);
+    if (v >= 0.92 && lerLS('jj-jv11-lido', null) !== hoje()) {
+      gravarLS('jj-jv11-lido', hoje());
+      renderInicio();
+      if (seuDiaAbertoEm !== hoje()) { seuDiaAbertoEm = hoje(); setTimeout(abrirSeuDia, 500); } // terminou de ler: sobe "Seu dia"
+    }
+  } else if (ev.data.jv11 === 'seudia') abrirSeuDia();
+});
+
+// Cartão "JV11 de hoje" no Início: aparece quando o boletim de hoje existe; depois de lido, vira uma linha discreta.
+function renderJv11Inicio() {
+  const box = $('ini-jv11-box');
+  const k = chaveJv11();
+  if (!k || !jv11Hoje || jv11Hoje.data !== hoje()) { box.hidden = true; return; }
+  const lido = lerLS('jj-jv11-lido', null) === hoje();
+  box.hidden = false;
+  box.className = 'card jv11-card' + (lido ? ' lido' : '');
+  box.innerHTML = lido
+    ? `<div class="jv11-linha"><span>JV11 de hoje · lido</span><button class="link" id="jv11-ler">Reler ›</button></div>`
+    : `<small class="jv11-rotulo">JV11 de hoje</small><p class="jv11-manchete">${e(jv11Hoje.manchete || 'O boletim do dia está pronto.')}</p>
+       <button class="botao menta" id="jv11-ler">Ler${jv11Hoje.minutos ? ` em ${jv11Hoje.minutos} min` : ''}</button>`;
+  $('jv11-ler').onclick = () => abrirBoletim(jv11Hoje.data);
+}
+
 // ================= INÍCIO =================
 const PREFS_PADRAO = { contadores: true, lua: true, hoje: true, habitos: true, neste: true, entrevista: true };
 let prefs = { ...PREFS_PADRAO, ...lerLS('jj-inicio', {}) };
@@ -1494,16 +1631,42 @@ function svgLua(fase) {
   return `<svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="${r}" fill="#281B15" stroke="#4A3A32"/>
     <path d="M12 2 A${r} ${r} 0 0 ${lado} 12 22 A${k} ${r} 0 0 ${varre} 12 2z" fill="#F2E7DF"/></svg>`;
 }
+// Aniversários dos próximos 7 dias: vêm da nuvem (o PC manda as pessoas); fica guardado para abrir sem internet.
+let aniversarios = lerLS('jj-aniv', { quando: 0, lista: [] });
+let buscandoAniv = false;
+async function atualizarAniversarios() {
+  if (buscandoAniv) return;
+  if (DEMO) { if (!aniversarios.lista.length) aniversarios = { quando: Date.now(), lista: [{ id: 'd1', nome: 'Ed', dia: somaDias(hoje(), 3), idade: 30 }, { id: 'd2', nome: 'Ana', dia: hoje(), idade: null }] }; return; }
+  if (!ligacao || Date.now() - aniversarios.quando < 3 * 3600_000) return;
+  buscandoAniv = true;
+  try {
+    const r = await nuvem('/avisos/aniversarios', null, 'GET');
+    aniversarios = { quando: Date.now(), lista: r.aniversarios || [] };
+    gravarLS('jj-aniv', aniversarios);
+    renderInicio();
+  } catch (err) { /* sem internet: fica o que já tinha */ }
+  buscandoAniv = false;
+}
+
 function cartoesContadores() {
   const lista = [];
   const est = estacaoAtual(new Date());
+  // Texto curto como o da Lua ("cheia em 12 dias"): "fim em 39 dias" cabe no cartão; "faltam N dias para o ..." estourava.
+  const dd = (n) => (n === 1 ? '1 dia' : n + ' dias');
   const txtEst = est.metade
-    ? `faltam <b class="mostarda">${est.faltam}</b> dias para o ${NOME_ESTACAO[est.proxima].toLowerCase()}`
-    : `há <b>${est.passados}</b> dias`;
+    ? `fim em <b class="mostarda">${dd(est.faltam)}</b>`
+    : `há <b>${dd(est.passados)}</b>`;
   lista.push(`<div class="contador">${svgEstacao(est.estacao, est.progresso)}<span><b class="c-nome">${NOME_ESTACAO[est.estacao]}</b><small>${txtEst}</small></span></div>`);
   if (prefs.lua) {
     const lua = faseDaLua(new Date());
     lista.push(`<div class="contador">${svgLua(lua.fase)}<span><b class="c-nome">${lua.nome}</b><small>${lua.emDias ? `${lua.proxima} em ${lua.emDias} ${lua.emDias === 1 ? 'dia' : 'dias'}` : `${lua.proxima} hoje`}</small></span></div>`);
+  }
+  for (const a of aniversarios.lista) {
+    const n = difDias(a.dia, hoje());
+    if (n < 0 || n > 7) continue;
+    const idade = a.idade ? `faz ${a.idade}` : '';
+    const quando = n === 0 ? 'é hoje!' : n === 1 ? 'amanhã' : `em ${n} dias`;
+    lista.push(`<div class="contador pessoal aniv${n === 0 ? ' hoje-aniv' : ''}"><b class="grande-n ${n === 0 ? '' : 'mostarda'}">${n}</b><span><b class="c-nome">${e(a.nome)}</b><small class="mostarda">${[idade, quando].filter(Boolean).join(' · ')}</small></span></div>`);
   }
   for (const c of dados.contadores || []) {
     const n = difDias(c.data, hoje());
@@ -1518,6 +1681,9 @@ function cartoesContadores() {
 }
 function renderInicio() {
   if (!$('ini-ano').isConnected) return;
+  atualizarAniversarios();
+  atualizarJv11();
+  renderJv11Inicio();
   const agora = new Date(), k = hoje();
   $('ini-data').textContent = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   // ano em 12 tracinhos
@@ -1547,21 +1713,7 @@ function renderInicio() {
   // hábitos que faltam
   $('ini-habitos-box').hidden = !prefs.habitos;
   if (prefs.habitos) {
-    const box = $('ini-habitos'); box.innerHTML = '';
-    const faltam = HABITOS.filter((x) => ativo(x, k) && !['ok', 'na'].includes(estado(x, k)));
-    if (!faltam.length) box.appendChild(h('<p class="meta">Todos marcados hoje.</p>'));
-    faltam.forEach((x) => {
-      // Água e PM3 têm quantidade: o toque abre a tela Hábitos de hoje para marcar lá.
-      const b = h(`<button class="chip-habito"><i class="caixa"></i>${e(x.curto)}</button>`);
-      b.onclick = () => {
-        if (x.tipo) { atual = k; irPara('habitos'); mostrarPainelHab('hoje'); return; }
-        const r = dia(k);
-        r.h[x.id] = true;
-        salvar(); renderInicio();
-        lanche(`${x.curto}: feito`, () => { const r2 = dia(k); delete r2.h[x.id]; salvar(); renderInicio(); });
-      };
-      box.appendChild(b);
-    });
+    chipsDeHabitos($('ini-habitos'), renderInicio);
   }
   // neste dia (anos anteriores)
   const md = k.slice(5);
@@ -1642,8 +1794,12 @@ let destravando = false;
 async function destravar() {
   if (destravando) return;
   destravando = true; $('trava-erro').textContent = '';
-  if (await pedirDigital()) document.documentElement.classList.remove('trancado');
-  else $('trava-erro').textContent = 'Não destravou. Toque no botão para tentar de novo.';
+  if (await pedirDigital()) {
+    // O logo cresce e some enquanto o app aparece por trás (0,4 s); sem movimento, destrava direto.
+    const t = $('trava'), calmo = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (calmo) document.documentElement.classList.remove('trancado');
+    else { document.documentElement.classList.add('destravando'); t.classList.add('saindo'); setTimeout(() => { document.documentElement.classList.remove('trancado', 'destravando'); t.classList.remove('saindo'); }, 400); }
+  } else $('trava-erro').textContent = 'Não destravou. Toque no botão para tentar de novo.';
   destravando = false;
 }
 $('trava-abrir').onclick = destravar;
@@ -1845,6 +2001,44 @@ function mostrarVersao() {
   sw.postMessage('versao', [canal.port2]);
 }
 
+// "Procurar atualização": confere o site (o sw.js novo se instala e a tela recarrega sozinha) e,
+// se houver, a casca do APK (isso só muda quando o app Android em si muda, o que é raro).
+const CASCA_API = 'https://api.github.com/repos/JVHubert/journal-apk/releases/tags/ultima';
+const CASCA_APK = 'https://github.com/JVHubert/journal-apk/releases/download/ultima/journal.apk';
+try { const c = new URLSearchParams(location.search).get('casca'); if (c) localStorage.setItem('jj-casca', c); } catch (err) { /* segue */ }
+$('aj-atualizar').onclick = async () => {
+  const msg = $('aj-atualizar-msg'), btn = $('aj-atualizar');
+  btn.disabled = true; msg.textContent = 'Procurando…';
+  try {
+    const reg = window.JJ_SW;
+    if (reg) {
+      await reg.update();
+      // se há versão nova, o controllerchange recarrega a tela em instantes
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+    let casca = null;
+    try {
+      const r = await fetch(CASCA_API + '?t=' + Date.now(), { headers: { Accept: 'application/vnd.github+json' } });
+      if (r.ok) { const m = /casca\s*(\d+)/i.exec((await r.json()).name || ''); if (m) casca = +m[1]; }
+    } catch (err) { /* sem casca publicada ainda */ }
+    const minha = +(localStorage.getItem('jj-casca') || 0);
+    if (casca && minha && casca > minha) {
+      msg.textContent = 'Há um app novo (casca ' + casca + ').';
+      btn.textContent = 'Baixar o app novo'; btn.disabled = false;
+      btn.onclick = () => { location.href = CASCA_APK; };
+      return;
+    }
+    msg.textContent = 'Você já está na versão mais nova.';
+  } catch (err) {
+    msg.textContent = 'Não consegui procurar agora (sem internet?).';
+  }
+  btn.disabled = false;
+};
+if (localStorage.getItem('jj-atualizou')) {
+  try { localStorage.removeItem('jj-atualizou'); } catch (err) { /* segue */ }
+  setTimeout(() => { const el = $('aj-versao'); lanche('App atualizado.'); }, 800);
+}
+
 // ================= AVISOS =================
 function talvezPedirAvisos(t) {
   if (!t || !(t.hora || t.lembrete) || DEMO) return;
@@ -1911,10 +2105,60 @@ function seguirEndereco(hash) {
   if (!hash) return;
   if (hash === '#tarefas-hoje') { vista = 'hoje'; irPara('tarefas'); }
   else if (hash === '#entrevista') abrirEntrevistaDeHoje();
-  else if (hash.startsWith('#tarefa=')) { irPara('tarefas'); const id = decodeURIComponent(hash.slice(8)); setTimeout(() => abrirDetalhe(id), 300); }
+  else if (hash.startsWith('#boletim=')) {
+    // #boletim=<data>&k=<chave>: vem do botão do Telegram. A chave fica só neste aparelho.
+    const p = new URLSearchParams(hash.slice(1));
+    if (p.get('k')) gravarLS('jj-jv11', { k: p.get('k') });
+    if (/^\d{4}-\d{2}-\d{2}$/.test(p.get('boletim') || '')) setTimeout(() => abrirBoletim(p.get('boletim')), 400);
+  }
+  else if (hash.startsWith('#tarefa=')) {
+    // #tarefa=<id> abre o detalhe; #tarefa=<id>&reagendar abre direto a folha Reagendar (toque no aviso).
+    irPara('tarefas');
+    const [bruto, ...resto] = hash.slice(8).split('&');
+    const id = decodeURIComponent(bruto), reagendar = resto.includes('reagendar');
+    let tentativas = 0;
+    const abrir = () => {
+      if (T.lista[id]) return reagendar ? abrirReagendar(id) : abrirDetalhe(id);
+      if (++tentativas < 12) setTimeout(abrir, 500); // as tarefas ainda estão chegando da nuvem
+    };
+    setTimeout(abrir, 300);
+  }
   history.replaceState(null, '', location.pathname + location.search);
 }
 navigator.serviceWorker?.addEventListener('message', (ev) => { if (ev.data && ev.data.abrir) seguirEndereco(ev.data.abrir); });
+
+// Compartilhar → Journal (Android): o link/texto chega como ?title=&text=&url=. Abre uma folha com duas escolhas:
+// virar tarefa (vai para o PC pela troca de tarefas) ou virar nota do celular.
+function abrirCompartilhado(partes) {
+  const vistos = new Set();
+  const texto = partes.filter((p) => { const t = p.trim(); if (!t || vistos.has(t)) return false; vistos.add(t); return true; }).join('\n').slice(0, 4000);
+  if (!texto) return;
+  const linhas = texto.split('\n');
+  const el = h(`<div class="compartilhado"><h2>Guardar no Journal</h2>
+    <p class="comp-previa">${e(texto.slice(0, 300))}${texto.length > 300 ? '…' : ''}</p>
+    <button class="botao menta grande" data-a="tarefa">Virar tarefa</button>
+    <button class="botao grande" data-a="nota">Virar nota</button></div>`);
+  el.querySelector('[data-a="tarefa"]').onclick = async () => {
+    const titulo = linhas[0].slice(0, 200);
+    criarTarefa({ titulo, notas: linhas.slice(1).join('\n') || null, data: hoje() });
+    await fecharCamada();
+    irPara('tarefas');
+    lanche('Tarefa criada com o que você compartilhou.');
+  };
+  el.querySelector('[data-a="nota"]').onclick = async () => {
+    await fecharCamada();
+    editarNota({ titulo: linhas[0].length <= 80 && linhas.length > 1 ? linhas[0] : '', texto: linhas[0].length <= 80 && linhas.length > 1 ? linhas.slice(1).join('\n') : texto });
+  };
+  abrirFolha(el);
+}
+{
+  const q = new URLSearchParams(location.search);
+  if (q.has('title') || q.has('text') || q.has('url')) {
+    const partes = [q.get('title') || '', q.get('text') || '', q.get('url') || ''];
+    history.replaceState(null, '', location.pathname);
+    setTimeout(() => abrirCompartilhado(partes), 500);
+  }
+}
 
 // Tweet do dia pelo serviço do Journal (Gemini); o app.js chama ao fim da entrevista.
 window.tweetPelaNuvem = async (texto) => (await nuvem('/tweet', { texto })).tweet || null;

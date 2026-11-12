@@ -1132,5 +1132,26 @@ const inicial = new URLSearchParams(location.search).get('tela');
 if (inicial) irPara(inicial);
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Atualização automática: o sw.js novo se instala sozinho (skipWaiting); quando ele assume, a tela recarrega
+  // na hora certa (sem nada sendo digitado, ou quando o app vai para segundo plano) e avisa a versão.
+  const tinhaControle = !!navigator.serviceWorker.controller;
+  let recarregando = false;
+  const digitando = () => { const x = document.activeElement; return !!x && /^(INPUT|TEXTAREA)$/.test(x.tagName) || (x && x.isContentEditable); };
+  const recarregar = () => {
+    if (recarregando) return;
+    recarregando = true;
+    try { localStorage.setItem('jj-atualizou', '1'); } catch (e) { /* segue */ }
+    location.reload();
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!tinhaControle) return; // 1ª instalação: nada para atualizar
+    if (document.hidden || !digitando()) recarregar();
+    else document.addEventListener('visibilitychange', () => { if (document.hidden) recarregar(); });
+  });
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    window.JJ_SW = reg;
+    reg.update().catch(() => {});
+    // Ao voltar para o app, confere de novo se há versão nova.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {});
 }

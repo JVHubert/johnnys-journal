@@ -34,6 +34,8 @@
         </div>
       </header>
 
+      <section class="card" id="ini-jv11-box" hidden></section>
+
       <section class="card" id="ini-hoje-box">
         <div class="card-topo"><h2 class="titulo-card">Hoje <small id="ini-hoje-n"></small></h2><button class="link" id="ini-ver-tudo">Ver tudo ›</button></div>
         <div id="ini-hoje"></div>
@@ -268,6 +270,8 @@
       </div>
 
       <p class="versao-app" id="aj-versao"></p>
+      <button class="botao" id="aj-atualizar">Procurar atualização</button>
+      <p class="meta" id="aj-atualizar-msg"></p>
     </section>
 
   </main>
@@ -287,7 +291,9 @@
   </nav>
 
   <div id="trava" role="dialog" aria-modal="true" aria-label="Journal trancado">
+    <img class="trava-logo" src="icons/icon-512.png" alt="" width="112" height="112">
     <p class="trava-titulo">Journal trancado</p>
+    <p class="trava-sub">Use a digital para entrar</p>
     <button class="botao menta grande" id="trava-abrir">Destravar com a digital</button>
     <p class="meta" id="trava-erro"></p>
   </div>

@@ -39,4 +39,22 @@ icone(192, 0.68, True).save(pasta / "icon-192.png")
 icone(512, 0.68, True).save(pasta / "icon-512.png")
 # "maskable": o Android corta em círculo ou gota, então o cubo fica dentro da área segura (80% do meio)
 icone(512, 0.56, False).save(pasta / "icon-maskable-512.png")
+
+
+def silhueta(lado, ocupa):
+    """Ícone de aviso (barra de status do Android): só o desenho em branco sobre transparente.
+    O Android usa só a forma (o alfa), por isso o desenho vira a parte opaca."""
+    base = Image.new("RGBA", (lado, lado), (0, 0, 0, 0))
+    k = lado * ocupa / max(cubo.size)
+    c = cubo.resize((round(cubo.width * k), round(cubo.height * k)), Image.LANCZOS)
+    cinza = c.convert("L")
+    alfa = Image.eval(cinza, lambda v: 255 - v)
+    alfa = Image.composite(alfa, Image.new("L", c.size, 0), c.getchannel("A"))
+    branco = Image.new("RGBA", c.size, (255, 255, 255, 255))
+    branco.putalpha(alfa)
+    base.alpha_composite(branco, ((lado - c.width) // 2, (lado - c.height) // 2))
+    return base
+
+
+silhueta(96, 0.92).save(pasta / "badge-96.png")
 print("ícones gerados em icons/")
