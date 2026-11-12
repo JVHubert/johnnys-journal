@@ -145,6 +145,7 @@
         <button class="icone-redondo" id="jor-lupa" aria-label="Procurar"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
       </header>
       <input id="jor-busca" class="campo" type="search" placeholder="Procurar nas notas e entrevistas" hidden>
+      <button class="pc-portal" id="jor-pc" type="button" aria-label="Páginas do PC"></button>
       <div class="faixa-rola chips" id="jor-filtros">
         <button data-f="tudo" aria-pressed="true">Tudo</button>
         <button data-f="entrevistas" aria-pressed="false">Entrevistas</button>
@@ -241,6 +242,9 @@
         <p class="meta" id="aj-ligacao"></p>
       </div>
 
+      <h2 class="secao">Páginas do PC neste celular</h2>
+      <div class="card" id="aj-pc"></div>
+
       <h2 class="secao">Transcrição da entrevista</h2>
       <div class="card" id="groq-box">
         <p class="meta" id="groq-status"></p>
@@ -265,7 +269,7 @@
           <li><b>Áudio do ditado de tarefas:</b> Cloudflare (se a cota grátis do dia acabar, Groq). O texto ditado vai ao DeepSeek, que separa as tarefas.</li>
           <li><b>Cena da ilustração</b> (uma frase em inglês, sem nomes): Pollinations, que desenha.</li>
           <li><b>Avisos:</b> saem da Cloudflare pelo serviço de avisos do Chrome (Google), cifrados.</li>
-          <li><b>Páginas e imagens do PC:</b> ficam no PC; a pasta é copiada pelo Google Drive.</li>
+          <li><b>Páginas do PC:</b> o PC as envia à Cloudflare já embaralhadas; a chave fica só no PC e neste celular (se você abrir os dados). Imagens: ficam no PC por enquanto; a pasta é copiada pelo Google Drive.</li>
         </ul>
       </div>
 
@@ -282,6 +286,7 @@
 
   <!-- tela cheia por cima (nota aberta, editor, ditado) -->
   <div class="sobre" id="cheia" hidden></div>
+  <div class="sobre" id="pc-sobre" hidden></div>
 
   <nav class="barra" aria-label="Telas">
     <button data-tela="inicio" aria-current="page"><span class="pilula"><img alt="" data-icone="inicio"></span><span>Início</span></button>

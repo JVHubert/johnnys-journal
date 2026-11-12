@@ -2104,7 +2104,8 @@ window.aoMostrarTela = (tela) => {
   iconesBarra();
   if (tela === 'inicio') renderInicio();
   if (tela === 'tarefas') { renderTarefas(); sincTarefas(); }
-  if (tela === 'journal') renderJournal();
+  if (tela === 'journal') { renderJournal(); window.JJ_PC?.renderPortal?.(); }
+  if (tela === 'ajustes') window.JJ_PC?.renderAjustes?.();
   if (tela === 'habitos') mostrarPainelHab(painelHab);
 };
 let painelHab = 'hoje';
@@ -2189,6 +2190,10 @@ window.aoSincronizar = async () => {
 };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { sincTarefas(); renderInicio(); } });
 setInterval(() => { if (document.visibilityState === 'visible') sincTarefas(); }, 60000);
+
+// ================= PÁGINAS DO PC (Etapa 2) =================
+// Seção nova e separada (paginas.js, pc-sync.js, armazem.js): só ela usa o IndexedDB "jj-dados". Se falhar ao carregar, o resto do app segue igual.
+import('./paginas.js').then((m) => m.iniciar({ abrirCamada, fecharCamada, abrirFolha, buscarLigacao, nuvem })).catch((err) => console.warn('páginas do PC indisponíveis:', err));
 
 // ================= dados de exemplo (?demo) =================
 function tarefasDeExemplo() {
