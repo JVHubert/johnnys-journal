@@ -1914,7 +1914,7 @@ async function renderAjustes() {
   const st = h(`<div class="linha-chave"><span>${ligadoAqui ? 'Avisos ligados neste celular' : 'Avisos desligados neste celular'}</span><button class="botao contorno pequeno">${ligadoAqui ? 'Testar' : 'Ligar'}</button></div>`);
   st.querySelector('button').onclick = async () => {
     if (!ligadoAqui) { abrirPedidoAvisos(); return; }
-    try { const r = await nuvem('/avisos/testar', {}); avisar(r.enviados ? 'Aviso de teste enviado.' : 'Nenhum celular inscrito. Toque em Ligar.'); } catch (err) { avisar('Não consegui: ' + err.message); }
+    try { let r = await nuvem('/avisos/testar', {}); if (!r.enviados && await renovarInscricao()) r = await nuvem('/avisos/testar', {}); avisar(r.enviados ? 'Aviso de teste enviado.' : 'Nenhum celular inscrito. Toque em Ligar.'); } catch (err) { avisar('Não consegui: ' + err.message); }
   };
   av.appendChild(st);
   try { ajustesAvisos = DEMO ? { manha: '08:00', entrevista: '22:00', manhaLigado: true, entrevistaLigado: true, lembretesLigado: true } : await nuvem('/avisos/ajustes', null, 'GET'); }
@@ -2063,6 +2063,24 @@ function abrirPedidoAvisos() {
   abrirFolha(el);
 }
 const deB64url = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+/**
+ * Garante que este aparelho está inscrito nos avisos. A nuvem apaga a inscrição quando o Google a recusa (foi o que
+ * aconteceu ao trocar o navegador pelo app, em 12/11/2026: os lembretes pararam em silêncio). Por isso o app se
+ * reinscreve sozinho uma vez por dia (e quando o "Testar" acha zero aparelhos), com um endereço novo.
+ */
+async function renovarInscricao() {
+  if (DEMO || typeof Notification === 'undefined' || Notification.permission !== 'granted' || !('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+  const reg = await navigator.serviceWorker.ready;
+  const { chave } = await nuvem('/avisos/chave', null, 'GET');
+  let sub = await reg.pushManager.getSubscription();
+  if (sub) { try { await sub.unsubscribe(); } catch (err) { /* segue */ } }
+  sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: deB64url(chave) });
+  await nuvem('/avisos/inscrever', { inscricao: sub.toJSON(), aparelho: navigator.userAgent.includes('Android') ? 'celular' : 'outro' });
+  gravarLS('jj-avisos', { ...lerLS('jj-avisos', {}), ligado: true, renovado: hoje() });
+  return true;
+}
+setTimeout(() => { if (lerLS('jj-avisos', {}).renovado !== hoje()) renovarInscricao().catch(() => { /* tenta de novo na próxima abertura */ }); }, 5000);
+
 async function inscreverAvisos() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('este navegador não aceita avisos');
   if ((await Notification.requestPermission()) !== 'granted') throw new Error('negado');
@@ -2202,6 +2220,19 @@ function tarefasDeExemplo() {
 // ================= começo =================
 const inicialTela = new URLSearchParams(location.search).get('tela');
 irPara(inicialTela && document.getElementById('tela-' + inicialTela) ? inicialTela : 'inicio');
+// O Chrome (motor do app) oferece senha, cartão e endereço nos campos. Aqui nenhum campo é desse tipo: desliga.
+// ("off" é ignorado pelo Chrome nesses casos; um valor que não existe é o jeito de ele desistir.)
+function semSugestoes(raiz) {
+  raiz.querySelectorAll('input, textarea').forEach((c) => {
+    if (c.dataset.sem) return;
+    c.dataset.sem = '1';
+    c.setAttribute('autocomplete', c.type === 'password' ? 'new-password' : 'nope');
+    c.setAttribute('data-lpignore', 'true');
+    c.setAttribute('data-form-type', 'other');
+  });
+}
+semSugestoes(document);
+new MutationObserver((ms) => { if (ms.some((m) => m.addedNodes.length)) semSugestoes(document); }).observe(document.body, { childList: true, subtree: true });
 seguirEndereco(location.hash);
 buscarLigacao().then(() => { renderNovo(); sincTarefas(); });
 enviarFotosPendentes();
