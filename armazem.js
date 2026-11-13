@@ -6,7 +6,7 @@
 //   conteudo  {id, pg}      a página inteira como veio do PC (doc e todos os outros campos; é daqui que a edição sai)
 //   textos    {id, texto}   texto puro da página (busca e trecho)
 //   espacos   {id: 'espaco:xxx', obj, mudou, apagado?}
-//   inicio    {id: 'inicio', obj, mudou}
+//   inicio    {id: 'inicio', obj, mudou}   (também guarda {id: 'pessoas', obj: {lista}, mudou}: a lista de pessoas do PC)
 //   estado    {k: 'estado', desde, cofre, total, ultima, avisos, ilegiveis}
 //   chave     {k: 'chave', chave: CryptoKey NÃO extraível}   <- a chave dos dados nunca vai para localStorage nem para a nuvem
 //   arquivos  {k: 'img/<hash>' | 'mini/<hash>', bytes, mime}  cache das imagens já decifradas
@@ -60,6 +60,9 @@ export const esquecerChave = () => transacao(['chave'], 'readwrite', (t) => { t.
 
 const ESTADO_VAZIO = () => ({ k: 'estado', desde: 0, cofre: null, total: null, ultima: 0, avisos: [], ilegiveis: [] })
 export const lerEstado = async () => ({ ...ESTADO_VAZIO(), ...((await ler('estado', 'estado')) || {}) })
+/** Resultado guardado de uma conta cara (ex.: as menções do diário), na loja `estado` com a chave `k`. */
+export const lerGuardado = async (k) => (await ler('estado', k)) || null
+export const gravarGuardado = (k, valor) => transacao(['estado'], 'readwrite', (t) => { t.objectStore('estado').put({ ...valor, k }) })
 export const gravarEstado = (est) => transacao(['estado'], 'readwrite', (t) => { t.objectStore('estado').put({ ...est, k: 'estado' }) })
 
 // ---------------------------------------------------------------- índice de busca (em memória, montado na 1ª busca)
@@ -78,6 +81,7 @@ export async function gravarLote(lote) {
     for (const id of lote.apagarIds || []) { c.delete(id); x.delete(id) }
     for (const e of lote.espacos || []) t.objectStore('espacos').put(e)
     if (lote.inicio) t.objectStore('inicio').put(lote.inicio)
+    if (lote.pessoas) t.objectStore('inicio').put(lote.pessoas)
     if (lote.estado) t.objectStore('estado').put({ ...lote.estado, k: 'estado' })
   })
   cacheMetas = null
@@ -104,12 +108,53 @@ export const idDoEspaco = (m) => m.espaco || 'inbox'
 export async function listarPorEspaco(espaco) { return (await listarMetas()).filter((m) => idDoEspaco(m) === espaco) }
 export async function listarEspacos() { return (await lerTudo('espacos')).filter((e) => !e.apagado).map((e) => e.obj) }
 export async function lerInicio() { return (await ler('inicio', 'inicio'))?.obj || null }
+/** A lista de pessoas que o PC mandou ({ lista: [{id, nome, apelidos, nascimento}] }), ou null se ainda não veio. */
+export async function lerPessoas() { const r = await ler('inicio', 'pessoas'); return r && !r.apagado ? { obj: r.obj, mudou: r.mudou } : null }
 export const pendentes = async () => (await lerTudo('paginas')).filter((m) => m.pendente && !m.apagado)
 export async function contar() {
   const metas = await listarMetas()
   const por = {}
   for (const m of metas) por[idDoEspaco(m)] = (por[idDoEspaco(m)] || 0) + 1
   return { paginas: metas.length, porEspaco: por, espacos: (await listarEspacos()).length, pendentes: metas.filter((m) => m.pendente).length }
+}
+
+/**
+ * As páginas no formato que o mencoes.js (cópia do PC) espera: { id, titulo, previa, etiquetas, lugar, espaco, data }.
+ * A `previa` é montada como a do PC (título, quebra de linha e o começo do texto, 240 caracteres), a partir da loja `textos`:
+ * não precisa abrir as páginas inteiras. Só as do diário (`espacoDiario` e com data) levam prévia.
+ * Resumos gravados antes da 2.88 não têm `etiquetas`/`lugar`: completa uma vez, lendo só esses de `conteudo`.
+ */
+export async function paginasParaMencoes(espacoDiario) {
+  let metas = await listarMetas()
+  const faltam = metas.filter((m) => m.lugar === undefined)
+  if (faltam.length) {
+    const novas = []
+    await transacao(['conteudo'], 'readonly', async (t) => {
+      for (const m of faltam) {
+        const c = await pedido(t.objectStore('conteudo').get(m.id))
+        novas.push({ ...m, etiquetas: c?.pg?.etiquetas || [], lugar: c?.pg?.lugar || null })
+      }
+    })
+    await gravarLote({ metas: novas })
+    metas = await listarMetas()
+  }
+  const doDiario = (m) => m.espaco === espacoDiario && m.data
+  // só os textos das páginas do diário (as outras nem precisam de prévia): leituras em paralelo, numa transação só
+  const textos = new Map()
+  await transacao(['textos'], 'readonly', async (t) => {
+    const loja = t.objectStore('textos')
+    await Promise.all(metas.filter(doDiario).map(async (m) => { const o = await pedido(loja.get(m.id)); if (o) textos.set(m.id, o.texto || '') }))
+  })
+  return metas.map((m) => {
+    let previa = ''
+    if (doDiario(m)) {
+      const titulo = String(m.titulo || '')
+      const texto = textos.get(m.id) || ''
+      const corpo = titulo && texto.startsWith(titulo) ? texto.slice(titulo.length).trim() : texto
+      previa = (titulo + (corpo ? '\n' + corpo : '')).slice(0, 240)
+    }
+    return { id: m.id, titulo: m.titulo, previa, etiquetas: m.etiquetas || [], lugar: m.lugar || null, espaco: m.espaco, data: m.data }
+  })
 }
 
 async function montarIndice() {
@@ -147,8 +192,9 @@ export const gravarArquivo = (k, bytes, mime) => transacao(['arquivos'], 'readwr
 
 // ---------------------------------------------------------------- apagar a cópia deste aparelho (a nuvem e o PC não são tocados)
 export async function limparPaginas() {
-  await transacao(['paginas', 'conteudo', 'textos', 'espacos', 'inicio', 'arquivos'], 'readwrite', (t) => {
+  await transacao(['paginas', 'conteudo', 'textos', 'espacos', 'inicio', 'arquivos', 'estado'], 'readwrite', (t) => {
     for (const l of ['paginas', 'conteudo', 'textos', 'espacos', 'inicio', 'arquivos']) t.objectStore(l).clear()
+    t.objectStore('estado').delete('mencoes')
   })
   const est = await lerEstado()
   await gravarEstado({ ...ESTADO_VAZIO(), cofre: est.cofre })

@@ -5,7 +5,7 @@
 import { abrirCofre, abrirComRecuperacao, paraCryptoKey, cifrar, decifrar, decifrarBytes } from './cifra.mjs'
 import * as A from './armazem.js'
 
-export const TIPOS_DO_CELULAR = new Set(['pagina', 'espaco', 'inicio'])
+export const TIPOS_DO_CELULAR = new Set(['pagina', 'espaco', 'inicio', 'pessoas'])
 export const LOTE_BYTES = 1_800_000
 export const LOTE_REGISTROS = 300
 const dois = (n) => String(n).padStart(2, '0')
@@ -16,7 +16,7 @@ export function canon(v) {
   if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']'
   return '{' + Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}'
 }
-export const tipoDoId = (id) => (id === 'inicio' ? 'inicio' : String(id).startsWith('espaco:') ? 'espaco' : 'pagina')
+export const tipoDoId = (id) => (id === 'inicio' ? 'inicio' : id === 'pessoas' ? 'pessoas' : String(id).startsWith('espaco:') ? 'espaco' : 'pagina')
 export const rotuloConflito = (agora) => { const d = new Date(agora); return `(conflito ${dois(d.getDate())}/${dois(d.getMonth() + 1)})` }
 function docComSufixo(doc, sufixo) {
   const novo = JSON.parse(JSON.stringify(doc && doc.type === 'doc' ? doc : { type: 'doc', content: [] }))
@@ -65,6 +65,7 @@ export function metaDe(id, pg, mudou, extra = {}) {
     meta: {
       id, titulo, espaco: pg.espaco || null, data: pg.data || null, quando: dataParaMs(pg.data) || pg.criada || pg.atualizada || 0,
       criada: pg.criada || 0, atualizada: pg.atualizada || 0, mudou, previa: semTitulo.slice(0, 160),
+      etiquetas: Array.isArray(pg.etiquetas) ? pg.etiquetas : [], lugar: pg.lugar || null,
       origem: typeof pg.origem === 'string' ? pg.origem : pg.origem?.tipo || null, ...extra,
     },
     conteudo: { id, pg }, texto: { id, texto },
@@ -166,7 +167,7 @@ export async function limparAvisos() { const est = await A.lerEstado(); await A.
 
 /** Aplica uma resposta da nuvem e anda o cursor (`desde`) na mesma transação. Devolve o estado novo. */
 async function aplicar(r, enviadas, chave, resumo, est, aoProgresso) {
-  const lote = { metas: [], conteudos: [], textos: [], apagarIds: [], espacos: [], inicio: null }
+  const lote = { metas: [], conteudos: [], textos: [], apagarIds: [], espacos: [], inicio: null, pessoas: null }
   const agora = Date.now()
   const regs = r.registros || []
   let falhas = 0, lidos = 0
@@ -176,12 +177,13 @@ async function aplicar(r, enviadas, chave, resumo, est, aoProgresso) {
   for (const reg of regs) {
     const tipo = tipoDoId(reg.id)
     if (!TIPOS_DO_CELULAR.has(reg.tipo) || reg.tipo !== tipo) { resumo.ignorados++; continue }
-    if (tipo === 'espaco' || tipo === 'inicio') {
-      const loja = tipo === 'inicio' ? await lerSimples('inicio', 'inicio') : await lerSimples('espacos', reg.id)
+    if (tipo === 'espaco' || tipo === 'inicio' || tipo === 'pessoas') {
+      const loja = tipo === 'inicio' ? await lerSimples('inicio', 'inicio') : tipo === 'pessoas' ? await lerSimples('inicio', 'pessoas') : await lerSimples('espacos', reg.id)
       if (loja && loja.mudou >= reg.mudou) continue
       let obj = null
       if (!reg.apagado) { try { obj = await decifrar(chave, reg.id, reg.blob); lidos++ } catch { falhas++; ilegiveis.add(reg.id); continue } }
       if (tipo === 'inicio') lote.inicio = { id: 'inicio', obj, mudou: reg.mudou }
+      else if (tipo === 'pessoas') lote.pessoas = { id: 'pessoas', obj, mudou: reg.mudou, ...(reg.apagado ? { apagado: true } : {}) }
       else lote.espacos.push({ id: reg.id, obj: obj || loja?.obj, mudou: reg.mudou, ...(reg.apagado ? { apagado: true } : {}) })
       resumo.recebidos++
       continue

@@ -17,8 +17,8 @@ const BLOCO = path.resolve(aqui, '../../../../2026.10.03 Bloco de Notas/01 Proje
 export const PC_SRC = path.join(BLOCO, 'bloco-de-notas-2/src')
 const NUVEM_PASTA = path.join(BLOCO, 'ditado-nuvem')
 const REAIS = process.env.BLOCO_DADOS_REAIS || path.join(BLOCO, 'dados')
-export const PORTA_NUVEM = 8841
-export const PORTA_APP = 8842
+export const PORTA_NUVEM = 8861
+export const PORTA_APP = 8862
 export const NUVEM = `http://127.0.0.1:${PORTA_NUVEM}`
 export const SEGREDO = 'teste'
 export const SENHA = 'senha-de-teste-123'
@@ -80,15 +80,16 @@ export const nuvemJson = (rota, corpo, metodo) => new Promise((ok, falha) => {
 export async function prepararPc() {
   const copia = path.join(temp, 'dados')
   fs.mkdirSync(copia, { recursive: true })
-  for (const n of ['paginas', 'espacos.json', 'inicio.json']) fs.cpSync(path.join(REAIS, n), path.join(copia, n), { recursive: true })
+  for (const n of ['paginas', 'espacos.json', 'inicio.json', 'pessoas.json']) fs.cpSync(path.join(REAIS, n), path.join(copia, n), { recursive: true })
   const mem = new Map()
   for (const f of fs.readdirSync(path.join(copia, 'paginas')).filter((x) => x.endsWith('.json'))) mem.set(f.slice(0, -5), JSON.parse(fs.readFileSync(path.join(copia, 'paginas', f), 'utf8')))
   let espacos = JSON.parse(fs.readFileSync(path.join(copia, 'espacos.json'), 'utf8'))
   let inicio = JSON.parse(fs.readFileSync(path.join(copia, 'inicio.json'), 'utf8'))
+  const pessoas = JSON.parse(fs.readFileSync(path.join(copia, 'pessoas.json'), 'utf8'))
   const marcas = new Map([...mem.keys()].map((id) => [id, '1']))
   const gravadas = []
   const fonte = {
-    listar: async () => ({ paginas: Object.fromEntries(marcas), lixeira: [], espacos, inicio }),
+    listar: async () => ({ paginas: Object.fromEntries(marcas), lixeira: [], espacos, inicio, pessoas }),
     paginas: async (ids) => Object.fromEntries(ids.filter((id) => mem.has(id)).map((id) => [id, mem.get(id)])),
     gravarPagina: async (id, pg) => { mem.set(id, pg); marcas.set(id, String(Date.now()) + Math.random()); gravadas.push(id) },
     apagarPagina: async (id) => { mem.delete(id); marcas.delete(id) },
@@ -98,7 +99,7 @@ export async function prepararPc() {
   const modulo = await import(pathToFileURL(path.join(PC_SRC, 'nuvem-dados.js')).href)
   const cifra = await import(pathToFileURL(path.join(ETAPA2, 'cifra.mjs')).href)
   const md = await import(pathToFileURL(path.join(ETAPA2, 'tiptap-md.mjs')).href)
-  return { mem, fonte, gravadas, modulo, cifra, md, espacos: () => espacos, inicio: () => inicio }
+  return { mem, fonte, gravadas, modulo, cifra, md, pessoas, espacos: () => espacos, inicio: () => inicio }
 }
 
 export const nuvemDoPc = (corpo) => nuvemJson('/dados/sincronizar', corpo)

@@ -34,6 +34,8 @@
         </div>
       </header>
 
+      <section class="card" id="ini-aniv-box" aria-label="Aniversários" hidden></section>
+
       <section class="card" id="ini-jv11-box" hidden></section>
 
       <section class="card" id="ini-hoje-box">
@@ -144,15 +146,16 @@
         <h1>Journal</h1>
         <button class="icone-redondo" id="jor-lupa" aria-label="Procurar"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
       </header>
-      <input id="jor-busca" class="campo" type="search" placeholder="Procurar nas notas e entrevistas" hidden>
-      <button class="pc-portal" id="jor-pc" type="button" aria-label="Páginas do PC"></button>
+      <div class="faixa-rola" id="jor-espacos"></div>
+      <input id="jor-busca" class="campo" type="search" enterkeyhint="search" autocomplete="off" placeholder="Procurar nas notas e entrevistas" hidden>
+      <p class="jor-escopo" id="jor-escopo" hidden></p>
+      <div id="jor-pc" class="jor-status" aria-live="polite"></div>
       <div class="faixa-rola chips" id="jor-filtros">
         <button data-f="tudo" aria-pressed="true">Tudo</button>
         <button data-f="entrevistas" aria-pressed="false">Entrevistas</button>
         <button data-f="notas" aria-pressed="false">Notas</button>
         <button data-f="galeria" aria-pressed="false">Galeria</button>
       </div>
-      <div class="faixa-rola" id="jor-espacos"></div>
       <button class="atalho-entrevista" id="jor-entrevista"></button>
       <div class="mural" id="jor-mural"></div>
       <button class="fab menta fab-largo" id="jor-nova">+ Nota</button>

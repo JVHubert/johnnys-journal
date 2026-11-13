@@ -12,6 +12,7 @@ const { chromium } = createRequire(PW)('playwright-core')
 const PRINTS = process.argv.includes('--prints')
 const PASTA_PRINTS = path.resolve(APP, '../prints-claude-design/etapa2-celular')
 if (PRINTS) fs.mkdirSync(PASTA_PRINTS, { recursive: true })
+setTimeout(() => { console.log('FALHA tempo máximo do teste esgotado'); process.exit(3) }, 380_000) // nunca pode travar
 let falhas = 0
 const ok = (cond, msg) => { console.log((cond ? 'OK   ' : 'FALHA') + ' ' + msg); if (!cond) { falhas++; process.exitCode = 1 } }
 const dorme = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -45,7 +46,7 @@ try {
     for (;;) { r.registros.forEach((x) => vistos.set(x.id, x)); if (!r.mais) break; r = await nuvemDoPc({ desde: r.desde, continuar: true, mudancas: [] }) }
     return vistos
   }
-  ok(r0.resumo.enviados === naoTracker.length + espacosPC + 1, `o PC de teste subiu ${naoTracker.length} páginas + ${espacosPC} espaços + Início`)
+  ok(r0.resumo.enviados === naoTracker.length + espacosPC + 2, `o PC de teste subiu ${naoTracker.length} páginas + ${espacosPC} espaços + Início + Pessoas (a lista de pessoas é nova da Fase 4d)`)
 
   // ---- escolhas de páginas de teste ----
   const editaveis = naoTracker.filter(([, p]) => p.doc && md.editavel(p.doc) && textosDe(p.doc).join('').length > 40 && textosDe(p.doc).join('').length < 1500)
@@ -74,12 +75,12 @@ try {
     ok((await page.textContent('#jor-pc')).includes('Abrir') || (await page.textContent('#jor-pc')).includes('senha'), 'Journal mostra o convite "Páginas do PC" (sem chave)')
     ok(await page.isVisible('#jor-mural') && await page.isVisible('#jor-filtros'), 'o mural e os filtros do Journal continuam lá')
     if (PRINTS) await page.screenshot({ path: path.join(PASTA_PRINTS, '01-journal-convite-384.png') })
-    await page.click('#jor-pc'); await page.waitForSelector('[data-a="abrir"]')
+    await page.click('#jor-pc [data-a="abrir"]'); await page.waitForSelector('#pc-senha')
     if (PRINTS) { await page.waitForTimeout(900); await page.screenshot({ path: path.join(PASTA_PRINTS, '02-trancado-384.png') }) }
-    await page.click('[data-a="abrir"]'); await page.fill('#pc-senha', 'qualquer'); await page.click('#pc-enviar')
+    await page.fill('#pc-senha', 'qualquer'); await page.click('#pc-enviar')
     await page.waitForFunction(() => /ligar|Falta ligar/.test(document.getElementById('pc-erro').textContent))
     ok(true, 'sem ligação com a nuvem: avisa "Falta ligar o backup" em vez de quebrar')
-    await page.goBack(); await page.goBack(); await page.waitForTimeout(400)
+    await page.goBack(); await page.waitForTimeout(400)
     const depois = await ls()
     ok(antes === depois, 'localStorage idêntico antes e depois de visitar a seção sem chave (nada foi mexido)')
     ok(erros.length === 0, 'nenhum erro de script no modo sem chave' + (erros.length ? ': ' + erros[0] : ''))
@@ -97,14 +98,14 @@ try {
   }
   const idb = (page, loja) => page.evaluate((l) => new Promise((ok, no) => { const r = indexedDB.open('jj-dados'); r.onsuccess = () => { const q = r.result.transaction([l]).objectStore(l).getAll(); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error) }; r.onerror = () => no(r.error) }), loja)
   const idbChave = (page) => page.evaluate(() => new Promise((ok) => { const r = indexedDB.open('jj-dados'); r.onsuccess = () => { const q = r.result.transaction(['chave']).objectStore('chave').get('chave'); q.onsuccess = () => ok(q.result ? { tem: true, tipo: q.result.chave.constructor.name, extraivel: q.result.chave.extractable } : { tem: false }) } }))
-  const abrirSecao = async (page) => { await page.click('.barra button[data-tela="journal"]'); await page.click('#jor-pc'); await page.waitForTimeout(300) }
+  const abrirSecao = async (page) => { await page.click('.barra button[data-tela="journal"]'); await page.waitForSelector('#jor-pc [data-a="abrir"]'); await page.waitForTimeout(300) }
   const esperarSinc = (page, minimo = 1) => page.waitForFunction((m) => { const s = window.JJ_PC?.estado(); return s && !s.sinc.rodando && s.contagem && s.contagem.paginas >= m }, minimo, { timeout: 180_000 })
 
   const A = await novoContexto()
   const { page } = A
   await page.goto(URL_APP); await page.waitForTimeout(1200)
   await abrirSecao(page)
-  await page.click('[data-a="abrir"]')
+  await page.click('#jor-pc [data-a="abrir"]')
   if (PRINTS) { await page.waitForSelector('#pc-senha'); await page.waitForTimeout(900); await page.screenshot({ path: path.join(PASTA_PRINTS, '03-senha-384.png') }) }
   await page.fill('#pc-senha', 'senha-errada'); await page.click('#pc-enviar')
   await page.waitForFunction(() => /Senha errada/.test(document.getElementById('pc-erro').textContent))
@@ -141,7 +142,7 @@ try {
   const esperadoPorEsp = porEsp(naoTracker.map(([, p]) => ({ espaco: p.espaco })))
   ok(JSON.stringify(Object.entries(porEsp(vivas)).sort()) === JSON.stringify(Object.entries(esperadoPorEsp).sort()), 'contagem por espaço bate com o PC: ' + JSON.stringify(esperadoPorEsp))
   ok((await idb(page, 'espacos')).length === espacosPC, `${espacosPC} espaços chegaram`)
-  ok((await idb(page, 'inicio')).length === 1, 'o Início chegou')
+  ok((await idb(page, 'inicio')).length === 2, 'o Início e a lista de pessoas chegaram (a loja `inicio` guarda os dois)')
   ok(vivas.every((m) => !m.pendente), 'nada ficou "pendente" depois de só baixar')
   const est1 = (await idb(page, 'estado'))[0]
   ok(est1.desde > 0 && est1.total === naoTracker.length && est1.ultima > 0, 'estado guardado: cursor, total e hora da última troca')
@@ -159,41 +160,48 @@ try {
   ok(contagens.length >= 1 && contagens.reduce((a, b) => a + b, 0) < 50, `segunda troca é leve (${contagens.reduce((a, b) => a + b, 0)} registros trazidos)`)
   await page.unroute('**/dados/sincronizar')
 
-  // ================= 3. BUSCA =================
-  await page.waitForSelector('#pc-busca')
+  // ================= 3. BUSCA (a busca única do topo da aba Journal; "Procurar em todos" para varrer os espaços) =================
+  await page.waitForSelector('#jor-busca')
   const esperadoCoracao = naoTracker.filter(([, p]) => norm(textosDe(p.doc).join('') + ' ' + (p.titulo || '')).includes('coracao')).length
+  const contaEscopo = async () => Number((await page.textContent('#jor-escopo')).match(/([\d.]+) resultado/)[1].replace('.', ''))
   const tBusca = Date.now()
-  await page.fill('#pc-busca', 'coração')
-  await page.waitForFunction(() => /páginas? (têm|tem)/.test(document.querySelector('#pc-corpo .pc-sub')?.textContent || ''))
+  await page.fill('#jor-busca', 'coração')
+  await page.waitForFunction(() => /resultado/.test(document.getElementById('jor-escopo')?.textContent || ''))
+  await page.click('#jor-escopo [data-a="escopo"]')
+  await page.waitForFunction(() => /todos os espa/.test(document.getElementById('jor-escopo')?.textContent || ''))
   const dtBusca = Date.now() - tBusca
-  const rotulo1 = await page.textContent('#pc-corpo .pc-sub')
-  const n1 = Number(rotulo1.match(/^[\d.]+/)[0].replace('.', ''))
-  await page.fill('#pc-busca', 'coracao')
-  await page.waitForFunction((t) => (document.querySelector('#pc-corpo .pc-sub')?.textContent || '') !== t, rotulo1).catch(() => {})
-  await page.waitForTimeout(300)
-  const rotulo2 = await page.textContent('#pc-corpo .pc-sub')
-  const n2 = Number(rotulo2.match(/^[\d.]+/)[0].replace('.', ''))
+  const n1 = await contaEscopo()
+  await page.fill('#jor-busca', 'coracao'); await page.waitForTimeout(900)
+  const n2 = await contaEscopo()
   ok(n1 > 0 && n1 === n2, `busca "coração" e "coracao" acham o mesmo (${n1} e ${n2})`)
-  ok(n1 === Math.min(esperadoCoracao, 200) || n1 === esperadoCoracao, `e bate com a contagem feita direto nos arquivos do PC (${esperadoCoracao})`)
+  ok(n1 === esperadoCoracao, `e bate com a contagem feita direto nos arquivos do PC (${esperadoCoracao})`)
   console.log(`Busca (primeira, montando o índice): ${dtBusca} ms`)
-  ok(await page.$('#pc-corpo mark') !== null, 'o trecho destaca a palavra achada')
-  await page.fill('#pc-busca', 'xyzqwk-nao-existe'); await page.waitForTimeout(400)
-  ok(/Nenhuma página/.test(await page.textContent('#pc-corpo')), 'busca sem resultado mostra estado vazio')
-  const t2 = Date.now(); await page.fill('#pc-busca', 'viagem'); await page.waitForFunction(() => /têm|tem/.test(document.querySelector('#pc-corpo .pc-sub')?.textContent || '')); console.log(`Busca seguinte: ${Date.now() - t2} ms (inclui os 120 ms de espera da digitação)`)
-  if (PRINTS) { await page.fill('#pc-busca', 'coração'); await page.waitForTimeout(900); await page.screenshot({ path: path.join(PASTA_PRINTS, '07-busca-384.png') }) }
-  await page.fill('#pc-busca', ''); await page.waitForTimeout(400)
+  ok(await page.$('#jor-mural mark') !== null, 'o trecho destaca a palavra achada')
+  await page.fill('#jor-busca', 'xyzqwk-nao-existe'); await page.waitForTimeout(600)
+  ok(/Nada com essa busca/.test(await page.textContent('#jor-mural')), 'busca sem resultado mostra estado vazio')
+  const t2 = Date.now(); await page.fill('#jor-busca', 'viagem'); await page.waitForFunction(() => /resultado/.test(document.getElementById('jor-escopo')?.textContent || '')); console.log(`Busca seguinte: ${Date.now() - t2} ms (inclui os 120 ms de espera da digitação)`)
+  if (PRINTS) { await page.fill('#jor-busca', 'coração'); await page.waitForTimeout(900); await page.screenshot({ path: path.join(PASTA_PRINTS, '07-busca-384.png') }) }
+  await page.fill('#jor-busca', ''); await page.waitForTimeout(600)
+  // procura por título em todos os espaços (as páginas de teste estão em vários)
+  const buscar = async (q) => {
+    await page.fill('#jor-busca', ''); await page.waitForTimeout(300)
+    await page.fill('#jor-busca', q); await page.waitForTimeout(900)
+    const esc = await page.$('#jor-escopo:not([hidden]) [data-a="escopo"]')
+    if (esc && /Procurar em todos/.test(await esc.textContent())) { await esc.click(); await page.waitForTimeout(900) }
+  }
+  const cartoesPC = () => page.$$('#jor-mural .cartao-pc')
+  const voltarAoJournal = async () => { for (let i = 0; i < 8 && await page.isVisible('#pc-sobre'); i++) { await page.goBack(); await page.waitForTimeout(250) } }
 
   // ================= 4. ESPAÇOS, LISTA E LEITURA =================
-  await page.click('.pc-espaco.principal'); await page.waitForSelector('#pc-lista .pc-item')
-  const primeirosTitulos = await page.$$eval('#pc-lista .pc-item b', (xs) => xs.slice(0, 5).map((x) => x.textContent))
+  await page.click('#jor-espacos [data-e="journal"]'); await page.waitForSelector('#jor-mural .cartao-pc')
+  const primeirosTitulos = await page.$$eval('#jor-mural .cartao-pc b', (xs) => xs.slice(0, 5).map((x) => x.textContent))
   const doEspaco = vivas.filter((m) => (m.espaco || 'inbox') === 'journal').sort((a, b) => (b.quando || 0) - (a.quando || 0))
   ok(primeirosTitulos[0] === doEspaco[0].titulo, 'a lista do espaço começa pelo mais recente: "' + primeirosTitulos[0] + '"')
-  ok((await page.textContent('.pc-contagem')).includes(String(doEspaco.length).replace(/(\d)(?=(\d{3})+$)/, '$1.')), 'o espaço mostra quantas páginas tem')
+  ok((await page.textContent('#jor-espacos [data-e="journal"] small')).includes(String(doEspaco.length).replace(/(\d)(?=(\d{3})+$)/, '$1.')), 'a aba do espaço mostra quantas páginas tem')
   if (PRINTS) { await page.waitForTimeout(700); await page.screenshot({ path: path.join(PASTA_PRINTS, '08-lista-espaco-384.png') }) }
-  await page.goBack(); await page.waitForSelector('#pc-busca')
 
   // leitura rica: abre pela busca do título exato
-  const abrirPorTitulo = async (titulo) => { await page.fill('#pc-busca', titulo.slice(0, 50)); await page.waitForTimeout(500); await page.waitForSelector('#pc-corpo .pc-item'); const itens = await page.$$('#pc-corpo .pc-item'); for (const it of itens) { if ((await it.$eval('b', (b) => b.textContent)) === (titulo.length > 60 ? titulo.slice(0, 59).trimEnd() + '…' : titulo)) { await it.click(); return true } } await itens[0].click(); return false }
+  const abrirPorTitulo = async (titulo) => { await buscar(titulo.slice(0, 50)); await page.waitForSelector('#jor-mural .cartao-pc'); const itens = await cartoesPC(); for (const it of itens) { if ((await it.$eval('b', (b) => b.textContent)) === (titulo.length > 60 ? titulo.slice(0, 59).trimEnd() + '…' : titulo)) { await it.click(); return true } } await itens[0].click(); return false }
   const errosAntes = A.erros.length
   const tLeit = Date.now()
   await abrirPorTitulo(rica.p.titulo || textosDe(rica.p.doc)[0])
@@ -230,8 +238,8 @@ try {
     if (chave === `mini/${hashComMini}`) return r.fulfill({ status: 200, headers: { ...cab, 'content-type': 'application/octet-stream' }, body: Buffer.from(await cifra.cifrarBytes(chavePc, chave, new Uint8Array(pngMini))) })
     return r.fulfill({ status: 404, headers: cab, body: '{"erro":"não existe"}' })
   })
-  await page.fill('#pc-busca', comImagem[1].titulo.slice(0, 50)); await page.waitForTimeout(600)
-  const itens = await page.$$('#pc-corpo .pc-item'); await itens[0].click()
+  await buscar(comImagem[1].titulo.slice(0, 50))
+  const itens = await cartoesPC(); await itens[0].click()
   await page.waitForSelector('.pc-doc'); await page.waitForTimeout(1500)
   const imgs = await page.$$eval('.pc-doc img.pc-img', (xs) => xs.map((x) => ({ src: x.src.slice(0, 5), w: x.naturalWidth })))
   const semImg = await page.$$eval('.pc-sem-img', (xs) => xs.length)
@@ -247,8 +255,8 @@ try {
 
   // ================= 6. EDIÇÃO =================
   const tituloEdit = pgEdit.titulo || textosDe(pgEdit.doc)[0]
-  await page.fill('#pc-busca', tituloEdit.slice(0, 50)); await page.waitForTimeout(600)
-  const itensE = await page.$$('#pc-corpo .pc-item')
+  await buscar(tituloEdit.slice(0, 50))
+  const itensE = await cartoesPC()
   let achouE = false
   for (const it of itensE) { if ((await it.$eval('b', (b) => b.textContent)).startsWith(tituloEdit.slice(0, 30))) { await it.click(); achouE = true; break } }
   if (!achouE) await itensE[0].click()
@@ -282,24 +290,23 @@ try {
   ok(inalteradas === 0, 'nenhuma outra página foi alterada')
   // não editável
   await page.goBack(); await page.waitForTimeout(300)
-  await page.fill('#pc-busca', ''); await page.waitForTimeout(300)
+  await page.fill('#jor-busca', ''); await page.waitForTimeout(300)
   const tNE = naoEditavel[1].titulo || textosDe(naoEditavel[1].doc)[0]
-  await page.fill('#pc-busca', tNE.slice(0, 40)); await page.waitForTimeout(600)
-  await (await page.$$('#pc-corpo .pc-item'))[0].click(); await page.waitForSelector('.pc-doc')
+  await buscar(tNE.slice(0, 40))
+  await (await cartoesPC())[0].click(); await page.waitForSelector('.pc-doc')
   const ehMesma = (await page.textContent('.pc-doc')).includes(textosDe(naoEditavel[1].doc)[0].slice(0, 15))
   ok(!ehMesma || !(await page.$('[data-a="editar"]')), 'página que o editor simples não consegue guardar sem perder nada: só leitura, sem Editar')
   await page.goBack(); await page.waitForTimeout(300)
 
   // ================= 7. CONFLITOS =================
   const textoDe = async (id) => { const l = await idb(page, 'conteudo'); const c = l.find((x) => x.id === id); return c ? textosDe(c.pg.doc).join(' ') : null }
-  const paraInicio = async () => { for (let i = 0; i < 8 && !(await page.isVisible('#pc-busca')); i++) { await page.goBack(); await page.waitForTimeout(250) } }
+  const paraInicio = voltarAoJournal
   const editarOffline = async (id, titulo, texto) => {
     await paraInicio()
     await page.route('**/dados/sincronizar', (r) => r.abort())
-    await page.fill('#pc-busca', ''); await page.waitForTimeout(200)
-    await page.fill('#pc-busca', titulo.slice(0, 50)); await page.waitForTimeout(600)
+    await buscar(titulo.slice(0, 50))
     let clicou = false
-    for (const it of await page.$$('#pc-corpo .pc-item')) { if ((await it.$eval('b', (b) => b.textContent)).startsWith(titulo.slice(0, 30))) { await it.click(); clicou = true; break } }
+    for (const it of await cartoesPC()) { if ((await it.$eval('b', (b) => b.textContent)).startsWith(titulo.slice(0, 30))) { await it.click(); clicou = true; break } }
     if (!clicou) throw new Error('não achei a página ' + titulo)
     await page.waitForSelector('[data-a="editar"]'); await page.click('[data-a="editar"]'); await page.waitForSelector('#pc-md')
     await page.click('#pc-md'); await page.keyboard.press('Control+End'); await page.keyboard.type(' ' + texto)
@@ -355,7 +362,7 @@ try {
   contagens.length = 0
   await page.route('**/dados/sincronizar', async (r) => { const resp = await r.fetch(); const j = await resp.json(); contagens.push(j.registros.length); await r.fulfill({ response: resp, json: j }) })
   await page.click('#aj-pc button'); await page.waitForSelector('#pc-senha'); await page.fill('#pc-senha', SENHA); await page.click('#pc-enviar')
-  await page.waitForSelector('#pc-anel-caixa .pc-num'); await dorme(800); await esperarSinc(page, 1000)
+  await page.waitForSelector('#pc-sobre', { state: 'hidden' }); await dorme(800); await esperarSinc(page, 1000)
   ok(contagens.reduce((a, b) => a + b, 0) < 50, `reabrir com a senha certa não baixa tudo de novo (${contagens.reduce((a, b) => a + b, 0)} registros)`)
   ok(A.erros.length === 0, 'nenhum erro de script em toda a sessão' + (A.erros.length ? ': ' + A.erros.slice(0, 2).join(' | ') : ''))
   await A.ctx.close()
@@ -366,7 +373,7 @@ try {
     await B.page.goto(URL_APP); await B.page.waitForTimeout(1000)
     let n = 0
     await B.page.route('**/dados/sincronizar', async (r) => { n++; if (n === 4) return r.abort(); await r.continue() })
-    await abrirSecao(B.page); await B.page.click('[data-a="abrir"]'); await B.page.fill('#pc-senha', SENHA); await B.page.click('#pc-enviar')
+    await abrirSecao(B.page); await B.page.click('#jor-pc [data-a="abrir"]'); await B.page.fill('#pc-senha', SENHA); await B.page.click('#pc-enviar')
     await B.page.waitForFunction(() => { const s = window.JJ_PC?.estado(); return s && s.sinc.offline === true && !s.sinc.rodando }, null, { timeout: 120_000 })
     const parcial = (await idb(B.page, 'paginas')).filter((m) => !m.apagado).length
     const estP = (await idb(B.page, 'estado'))[0]
@@ -380,7 +387,8 @@ try {
     const trazidos = recebidos.reduce((a, b) => a + b, 0)
     const naNuvemFim = [...(await lerNuvem()).values()].filter((x) => x.tipo === 'pagina' && !x.apagado).length
     ok(final === naNuvemFim, `retomou e completou: ${final} páginas (a nuvem tem ${naNuvemFim})`)
-    ok(trazidos <= naNuvemFim - parcial + 5, `retomada trouxe só o que faltava (${trazidos} registros; faltavam ${naNuvemFim - parcial})`)
+    ok(trazidos <= naNuvemFim - parcial + 6, // +6: 4 espaços, Início e (Fase 4d) a lista de pessoas; era +5 antes das pessoas
+    `retomada trouxe só o que faltava (${trazidos} registros; faltavam ${naNuvemFim - parcial})`)
     await B.ctx.close()
   }
 
@@ -390,13 +398,13 @@ try {
     await C.page.goto(URL_APP); await C.page.waitForTimeout(1000)
     await C.page.click('.barra button[data-tela="journal"]'); await C.page.waitForTimeout(400)
     await C.page.screenshot({ path: path.join(PASTA_PRINTS, '14-journal-convite-390.png') })
-    await C.page.click('#jor-pc'); await C.page.click('[data-a="abrir"]'); await C.page.fill('#pc-senha', SENHA); await C.page.click('#pc-enviar')
+    await C.page.click('#jor-pc [data-a="abrir"]'); await C.page.fill('#pc-senha', SENHA); await C.page.click('#pc-enviar')
     await C.page.waitForSelector('#pc-anel-caixa .pc-num'); await esperarSinc(C.page, naoTracker.length); await C.page.waitForTimeout(1200)
     await C.page.screenshot({ path: path.join(PASTA_PRINTS, '15-inicio-da-secao-390.png') })
     await C.page.screenshot({ path: path.join(PASTA_PRINTS, '15b-inicio-completo-390.png'), fullPage: false })
-    await C.page.click('.pc-espaco.principal'); await C.page.waitForSelector('#pc-lista .pc-item'); await C.page.waitForTimeout(800)
+    await C.page.click('#jor-espacos [data-e="journal"]'); await C.page.waitForSelector('#jor-mural .cartao-pc'); await C.page.waitForTimeout(800)
     await C.page.screenshot({ path: path.join(PASTA_PRINTS, '16-lista-390.png') })
-    await C.page.click('#pc-lista .pc-item'); await C.page.waitForSelector('.pc-doc'); await C.page.waitForTimeout(700)
+    await C.page.click('#jor-mural .cartao-pc'); await C.page.waitForSelector('.pc-doc'); await C.page.waitForTimeout(700)
     await C.page.screenshot({ path: path.join(PASTA_PRINTS, '17-leitura-390.png') })
     const l = await C.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)
     ok(l, 'sem rolagem lateral a 390 px')

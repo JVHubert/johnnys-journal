@@ -16,6 +16,18 @@ for (const f of ['cifra.mjs', 'tiptap-html.mjs', 'tiptap-md.mjs', 'espelho-nucle
   const a = fs.readFileSync(path.join(APP, f)), b = fs.readFileSync(path.join(MESTRAS, f))
   ok(a.equals(b), `${f}: a cópia do app é idêntica à mestra (${a.length} bytes)`)
 }
+// Fase 4d: Pessoas e lugares usam o mesmo código do PC. Cópias IDÊNTICAS, byte a byte, às do Journal do PC (a mestra é a do PC).
+for (const f of ['mencoes.js', 'pessoas.js', 'texto.js']) {
+  const a = fs.readFileSync(path.join(APP, f)), b = fs.readFileSync(path.join(PC_SRC, f))
+  ok(a.equals(b), `${f}: a cópia do app é idêntica à do Journal do PC (${a.length} bytes)`)
+}
+// e o datas.js do app tem tudo o que o pessoas.js do PC importa (o do app é um pedaço do do PC: só confere os nomes)
+{
+  const datas = await import(pathToFileURL(path.join(APP, 'datas.js')).href)
+  ok(['hojeTexto', 'somarDias', 'paraTexto'].every((n) => typeof datas[n] === 'function'), 'datas.js do app tem hojeTexto, somarDias e paraTexto (o que pessoas.js usa)')
+  const pc = await import(pathToFileURL(path.join(PC_SRC, 'datas.js')).href)
+  ok(['hojeTexto', 'somarDias', 'paraTexto'].every((n) => String(datas[n]) === String(pc[n])), 'e as três funções são iguais às do PC')
+}
 const pcCifra = path.join(PC_SRC, 'cifra.mjs')
 if (fs.existsSync(pcCifra)) ok(fs.readFileSync(pcCifra).equals(fs.readFileSync(path.join(MESTRAS, 'cifra.mjs'))), 'cifra.mjs do PC também é idêntica à mestra')
 const pcNucleo = path.join(PC_SRC, 'espelho-nucleo.mjs')
@@ -33,10 +45,10 @@ const pcJuntar = path.join(PC_SRC, 'juntar.mjs')
 // sw.js: tudo o que a seção nova usa está no cache e existe no disco
 const sw = fs.readFileSync(path.join(APP, 'sw.js'), 'utf8')
 const lista = [...sw.slice(sw.indexOf('const ARQUIVOS'), sw.indexOf('];', sw.indexOf('const ARQUIVOS'))).matchAll(/'([^']+)'/g)].map((m) => m[1])
-for (const f of ['armazem.js', 'pc-sync.js', 'paginas.js', 'espelho.js', 'espelho-nucleo.mjs', 'juntar.js', 'cifra.mjs', 'tiptap-html.mjs', 'tiptap-md.mjs']) ok(lista.includes(f), `sw.js guarda ${f} no cache`)
+for (const f of ['armazem.js', 'pc-sync.js', 'paginas.js', 'journal-pc.js', 'mencoes.js', 'pessoas.js', 'texto.js', 'espelho.js', 'espelho-nucleo.mjs', 'juntar.js', 'cifra.mjs', 'tiptap-html.mjs', 'tiptap-md.mjs']) ok(lista.includes(f), `sw.js guarda ${f} no cache`)
 const faltam = lista.filter((f) => f !== './' && !fs.existsSync(path.join(APP, f)))
 ok(!faltam.length, 'todo arquivo listado em ARQUIVOS existe (um 404 derrubaria a instalação do cache)' + (faltam.length ? ': ' + faltam.join(', ') : ''))
-ok(/const VERSAO = '2\.86\.0'/.test(sw) && /const PUBLICADA = '2026-11-12T\d\d:\d\d'/.test(sw), 'sw.js: VERSAO 2.86.0 e PUBLICADA preenchidas')
+ok(/const VERSAO = '\d+\.\d+\.\d+'/.test(sw) && /const PUBLICADA = '\d{4}-\d\d-\d\dT\d\d:\d\d'/.test(sw), 'sw.js: VERSAO e PUBLICADA preenchidas (o teste antigo exigia 2.86.0 e já falhava na 2.87.0)')
 
 // a cópia de conflito do celular = a do PC
 const pc = await import(pathToFileURL(path.join(PC_SRC, 'nuvem-dados.js')).href)

@@ -789,3 +789,114 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
   .pc-anel .arco { transition: none; }
 }
 @media print { .pc-vista { color: #000; } }
+
+/* ---------- Fase 4d: a aba Journal organizada como o PC (journal-pc.js) ----------
+   Mesma identidade: uma cor de destaque (menta). Só transform e opacity nas animações. */
+.jor-sel { position: relative; margin: 0 -16px 2px; padding: 0 16px 6px; scroll-padding: 0 16px; gap: 2px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 30px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 30px), transparent 100%); }
+.jor-sel [role="tab"] { min-height: 46px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 15px; color: var(--sec); border-radius: 12px; transition: color .25s ease-out; }
+.jor-sel [role="tab"][aria-selected="true"] { color: var(--texto); font-weight: 700; }
+.jor-sel [role="tab"]:active { transform: scale(.97); }
+.jor-sel .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--cor); flex: none; }
+.jor-sel small { font-size: 12px; color: var(--apagado); font-variant-numeric: tabular-nums; font-weight: 500; }
+.jor-sel [role="tab"] > svg { flex: none; color: var(--sec); }
+.jor-sel [role="tab"][aria-selected="true"] > svg { color: var(--menta); }
+.jor-sel-marca { position: absolute; left: 0; bottom: 2px; width: 100px; height: 3px; border-radius: 2px; background: var(--menta); transform-origin: 0 50%; transform: translateX(16px) scaleX(0); transition: transform .5s cubic-bezier(.2, .8, .2, 1); pointer-events: none; }
+.jor-busca { margin: 4px 0 6px; min-height: 50px; border-radius: 14px; }
+.jor-busca:focus { outline: 0; border-color: var(--menta); }
+.jor-escopo { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 2px 4px; font-size: 13px; color: var(--sec); }
+.jor-escopo .link { min-height: 36px; font-size: 13px; white-space: nowrap; }
+.jor-status { margin: 4px 0 6px; }
+.jor-status.convite { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; border-radius: 16px; border: 1px dashed var(--borda-forte); background: var(--painel); }
+.jor-convite-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--elevado); color: var(--sec); }
+.jor-convite-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.jor-convite-txt b { font-size: 15px; }
+.jor-convite-txt small { font-size: 12.5px; color: var(--sec); line-height: 1.3; }
+.jor-status.baixando { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 16px; background: color-mix(in srgb, var(--menta) 8%, var(--painel)); border: 1px solid color-mix(in srgb, var(--menta) 28%, transparent); }
+.jor-status-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.jor-status-txt b { font-size: 15px; }
+.jor-status-linha { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; }
+.jor-status-linha .pc-status { min-height: 0; font-size: 12.5px; color: var(--apagado); }
+.jor-atualizar { width: 36px; height: 36px; display: grid; place-items: center; color: var(--apagado); border-radius: 50%; }
+.jor-atualizar.girando svg { animation: pc-gira 1.2s linear infinite; }
+.pc-pend-linha { font-size: 12.5px; color: var(--mostarda-capa); margin: 0 0 4px; }
+.jor-status .pc-avisos { margin: 6px 0 0; }
+.pc-anel.mini { width: 56px; height: 56px; margin: 0; flex: none; }
+.pc-anel.mini .pc-num { font-size: 15px; letter-spacing: 0; }
+.pc-anel.mini small { display: none; }
+.pc-anel.mini .trilho, .pc-anel.mini .arco { stroke-width: 9; }
+.mural.jor-novo { display: block; }
+.jor-mes { font-size: 14px; font-weight: 700; color: var(--sec); margin: 20px 2px 8px; letter-spacing: 0; }
+.jor-mes:first-child { margin-top: 8px; }
+.mural-secao { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start; }
+.jor-vazio { text-align: center; padding: 28px 8px; }
+.mural.entra { animation: jor-entra .5s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes jor-entra { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+.cartao-pc { width: 100%; }
+.cartao-j .trecho mark { background: color-mix(in srgb, var(--menta) 28%, transparent); color: var(--texto); border-radius: 3px; padding: 0 1px; }
+.cartao-pc .pc-pend { margin-left: auto; font-style: normal; color: var(--mostarda-capa); }
+
+/* Pessoas e lugares */
+.men-topo { margin: 6px 0 14px; }
+.men-conclusao { font-size: 22px; line-height: 1.25; letter-spacing: -.01em; margin: 0 0 14px; text-wrap: balance; }
+.men-conclusao b { font-weight: 700; }
+.men-n { color: var(--menta); font-variant-numeric: tabular-nums; }
+.men-sub { display: flex; gap: 6px; padding: 4px; border-radius: 14px; background: var(--painel); border: 1px solid var(--borda); }
+.men-sub button { flex: 1; min-height: 44px; border-radius: 10px; color: var(--sec); font-weight: 600; font-size: 15px; transition: background .25s ease-out, color .25s ease-out; }
+.men-sub button small { font-weight: 500; color: var(--apagado); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.men-sub button[aria-selected="true"] { background: color-mix(in srgb, var(--menta) 16%, var(--elevado)); color: var(--texto); }
+.men-lista { display: flex; flex-direction: column; gap: 8px; }
+.men-card { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 14px 11px 11px; text-align: left; border-radius: 14px; background: var(--painel); border: 1px solid var(--borda);
+  animation: pc-entra .45s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 35ms); transition: transform .12s ease-out; }
+.men-card:active { transform: scale(.985); }
+.men-card.hoje { border-color: var(--mostarda-capa); background: rgba(240, 199, 102, .09); }
+.men-avatar { width: 44px; height: 44px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 15px; color: var(--menta); background: color-mix(in srgb, var(--menta) 14%, var(--elevado)); }
+.men-avatar.lugar { color: var(--verde-cinza); background: var(--elevado); }
+.men-avatar.grande { width: 72px; height: 72px; font-size: 24px; margin: 4px auto 10px; }
+.men-corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.men-corpo b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.men-corpo small { font-size: 13px; color: var(--sec); }
+.men-aniv { flex: none; font-size: 12.5px; color: var(--apagado); text-align: right; max-width: 40%; line-height: 1.25; }
+.men-aniv.perto { color: var(--mostarda-capa); font-weight: 600; }
+.men-resto { margin: 22px 2px 0; }
+.men-resto-nomes { font-size: 14px; color: var(--sec); line-height: 1.6; margin: 0; }
+.men-nota { margin: 22px 2px 0; color: var(--apagado); }
+.men-cab { position: relative; z-index: 1; text-align: center; padding: 0 0 12px; }
+.men-cab h1 { font-size: 26px; letter-spacing: -.02em; text-wrap: balance; margin: 0 0 4px; }
+.men-numero { margin: 6px 0 0; font-size: 16px; color: var(--sec); }
+.men-numero .pc-num { font-size: 52px; color: var(--menta); }
+.men-ultimo { margin: 2px 0 0; font-size: 14px; color: var(--sec); }
+.men-detalhe { margin: 8px 0 0; font-size: 14px; color: var(--mostarda-capa); }
+.men-dias { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.men-dia { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 14px; background: var(--painel); border: 1px solid var(--borda);
+  animation: pc-entra .45s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 30ms); transition: transform .12s ease-out; }
+.men-dia:active { transform: scale(.985); }
+.men-data { font-size: 12px; color: var(--apagado); font-variant-numeric: tabular-nums; }
+.men-dia b { font-size: 16px; line-height: 1.3; overflow-wrap: anywhere; }
+.men-trecho { font-size: 14px; line-height: 1.4; color: var(--sec); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.men-trecho mark { background: color-mix(in srgb, var(--menta) 28%, transparent); color: var(--texto); border-radius: 3px; padding: 0 1px; }
+
+/* Início: cartão Aniversários */
+#ini-aniv-box { padding: 12px 14px 6px; }
+#ini-aniv-box .card-topo { margin-bottom: 4px; }
+.aniv-mes { font-size: 13px; color: var(--sec); margin: 2px 0 6px; }
+.aniv-lista { list-style: none; margin: 0; padding: 0; }
+.aniv-linha { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 4px; border-top: 1px solid var(--borda); animation: pc-entra .45s cubic-bezier(.2, .8, .2, 1) both; }
+.aniv-linha:first-child { border-top: 0; }
+.aniv-folha { width: 44px; height: 46px; flex: none; border-radius: 11px; background: var(--elevado); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; }
+.aniv-folha b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.aniv-folha small { font-size: 11px; color: var(--sec); }
+.aniv-corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.aniv-corpo b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aniv-corpo small { font-size: 13px; color: var(--sec); }
+.aniv-quando { flex: none; font-size: 13px; color: var(--mostarda-capa); font-weight: 600; }
+.aniv-linha.hoje { margin: 2px -4px; padding: 6px 8px 6px 4px; border-radius: 12px; border-top-color: transparent; background: rgba(240, 199, 102, .12); box-shadow: inset 0 0 0 1.5px var(--mostarda-capa); }
+.aniv-linha.hoje + .aniv-linha { border-top-color: transparent; }
+.aniv-linha.hoje .aniv-folha { background: var(--mostarda-capa); }
+.aniv-linha.hoje .aniv-folha b, .aniv-linha.hoje .aniv-folha small { color: #2A1D00; }
+.aniv-mais { display: block; margin: 0 auto; min-height: 40px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) {
+  .mural.entra, .men-card, .men-dia, .aniv-linha, .jor-atualizar.girando svg { animation: none; }
+  .jor-sel-marca, .jor-sel [role="tab"], .men-sub button { transition: none; }
+}

@@ -892,7 +892,16 @@ function cartao(it) {
 }
 
 let maisJournal = null;
+// Atalho "Entrevista de hoje" (o de cima da aba Journal): o mesmo texto de sempre.
+function atalhoEntrevista() {
+  const ent = lerDia(hoje()).entrevista;
+  const feita = !!(ent && ent.respostas.some(Boolean));
+  $('jor-entrevista').innerHTML = `${ICONE_MIC}<span><b>Entrevista de hoje</b> · ${feita ? 'feita' : 'ainda não feita'}</span><b>›</b>`;
+  $('jor-entrevista').classList.toggle('feita', feita);
+}
 function renderJournal() {
+  // Com a aba nova (journal-pc.js) carregada, é ela que desenha. Se não carregar, o Journal de antes continua aqui embaixo.
+  if (window.JJ_JOR && window.JJ_JOR.ativo) { window.JJ_JOR.render(); return; }
   const mural = $('jor-mural');
   if (!mural) return;
   $('jor-filtros').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.f === filtro)));
@@ -1679,9 +1688,42 @@ function cartoesContadores() {
   lista.push('<button class="contador mais" id="ini-mais-contador">+ Contador</button>');
   return lista.join('');
 }
+// Cartão "Aniversários" do Início, como o do PC: próximos 30 dias, idade quando há ano, hoje em destaque.
+// Com a chave dos dados: a lista de pessoas que o PC mandou. Sem ela: a lista da nuvem (só os próximos 7 dias).
+let pintandoAniv = 0;
+async function pintarAniversarios() {
+  const box = $('ini-aniv-box');
+  if (!box) return;
+  const vez = ++pintandoAniv;
+  let r = null;
+  try { r = window.JJ_JOR && window.JJ_JOR.aniversarios ? await window.JJ_JOR.aniversarios() : null; } catch (err) { r = null; }
+  if (vez !== pintandoAniv) return;
+  if (!r) {
+    r = { mesQueVem: [], lista: aniversarios.lista.map((a) => ({ id: a.id, nome: a.nome, dia: a.dia, dias: difDias(a.dia, hoje()), idade: a.idade || null })).filter((a) => a.dias >= 0 && a.dias <= 30).sort((a, b) => a.dias - b.dias) };
+  }
+  box.hidden = !r.lista.length && !r.mesQueVem.length;
+  if (box.hidden) return;
+  const quando = (a) => (a.dias === 0 ? 'hoje' : a.dias === 1 ? 'amanhã' : `em ${a.dias} dias`);
+  const linha = (a) => {
+    const [, mm, dd] = a.dia.split('-');
+    return `<li class="aniv-linha${a.dias === 0 ? ' hoje' : ''}"><span class="aniv-folha"><b>${Number(dd)}</b><small>${MES3[Number(mm) - 1]}</small></span><span class="aniv-corpo"><b>${e(a.nome)}</b><small>${a.idade ? `faz ${a.idade}` : 'aniversário'}</small></span><span class="aniv-quando">${quando(a)}</span></li>`;
+  };
+  const MAX = 4;
+  const expandido = box.dataset.aberto === '1';
+  const visiveis = expandido ? r.lista : r.lista.slice(0, MAX);
+  box.innerHTML = `<div class="card-topo"><h2 class="titulo-card">Aniversários <small>próximos 30 dias</small></h2></div>
+    ${r.mesQueVem.length ? `<p class="aniv-mes">Mês que vem: ${r.mesQueVem.map((x) => `${e(x.nome)} (${x.dia})`).join(', ')}</p>` : ''}
+    ${visiveis.length ? `<ul class="aniv-lista">${visiveis.map(linha).join('')}</ul>` : ''}
+    ${r.lista.length > MAX ? `<button type="button" class="link aniv-mais">${expandido ? 'Mostrar menos' : `Ver mais ${r.lista.length - MAX}`}</button>` : ''}`;
+  const mais = box.querySelector('.aniv-mais');
+  if (mais) mais.onclick = () => { box.dataset.aberto = expandido ? '0' : '1'; pintarAniversarios(); };
+}
+window.JJ_ini = { aniversarios: pintarAniversarios };
+
 function renderInicio() {
   if (!$('ini-ano').isConnected) return;
   atualizarAniversarios();
+  pintarAniversarios();
   atualizarJv11();
   renderJv11Inicio();
   const agora = new Date(), k = hoje();
@@ -2195,6 +2237,8 @@ setInterval(() => { if (document.visibilityState === 'visible') sincTarefas(); }
 // ================= PÁGINAS DO PC (Etapa 2) =================
 // Seção nova e separada (paginas.js, pc-sync.js, armazem.js): só ela usa o IndexedDB "jj-dados". Se falhar ao carregar, o resto do app segue igual.
 import('./paginas.js').then((m) => m.iniciar({ abrirCamada, fecharCamada, abrirFolha, buscarLigacao, nuvem })).catch((err) => console.warn('páginas do PC indisponíveis:', err));
+// A aba Journal organizada como o PC (espaços, linha do tempo única, Pessoas e lugares). Se não carregar, vale o Journal de antes.
+import('./journal-pc.js').then((m) => m.iniciar({ ESPACOS, itensJournal, cartao, atalhoEntrevista, mudouAlgo: () => pintarAniversarios() })).catch((err) => console.warn('Journal por espaços indisponível:', err));
 
 // ================= ESPELHO CIFRADO DOS DADOS (Etapa 2, Fase 4c) =================
 // Segundo canal, em paralelo ao backup do GitHub: dias, notas, memórias, contadores, hábitos e plano também vão (cifrados) pela nuvem
