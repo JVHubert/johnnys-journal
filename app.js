@@ -89,6 +89,7 @@ function salvar() {
   try { localStorage.setItem(CHAVE, JSON.stringify(dados)); }
   catch (e) { avisar('Não consegui salvar neste navegador.'); }
   agendarSync();
+  try { if (window.jjEspelho) window.jjEspelho.agendar(); } catch (e) { /* o espelho nunca atrapalha */ }
 }
 // dia(k) é chamado antes de toda mudança: o carimbo t decide qual versão vence na sincronização
 const dia = (k) => { const r = (dados.dias[k] = dados.dias[k] || { h: {} }); r.t = Date.now(); return r; };

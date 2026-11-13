@@ -12,17 +12,28 @@ const PC_SRC = path.resolve(aqui, "../../../../2026.10.03 Bloco de Notas/01 Proj
 let falhas = 0
 const ok = (cond, msg) => { console.log((cond ? 'OK   ' : 'FALHA') + ' ' + msg); if (!cond) { falhas++; process.exitCode = 1 } }
 
-for (const f of ['cifra.mjs', 'tiptap-html.mjs', 'tiptap-md.mjs']) {
+for (const f of ['cifra.mjs', 'tiptap-html.mjs', 'tiptap-md.mjs', 'espelho-nucleo.mjs']) {
   const a = fs.readFileSync(path.join(APP, f)), b = fs.readFileSync(path.join(MESTRAS, f))
   ok(a.equals(b), `${f}: a cópia do app é idêntica à mestra (${a.length} bytes)`)
 }
 const pcCifra = path.join(PC_SRC, 'cifra.mjs')
 if (fs.existsSync(pcCifra)) ok(fs.readFileSync(pcCifra).equals(fs.readFileSync(path.join(MESTRAS, 'cifra.mjs'))), 'cifra.mjs do PC também é idêntica à mestra')
+const pcNucleo = path.join(PC_SRC, 'espelho-nucleo.mjs')
+ok(fs.existsSync(pcNucleo) && fs.readFileSync(pcNucleo).equals(fs.readFileSync(path.join(MESTRAS, 'espelho-nucleo.mjs'))), 'espelho-nucleo.mjs do PC também é idêntica à mestra')
+// juntar.mjs do PC = o juntar.js do celular (mestre) byte a byte + só o rodapé de export (a lógica não muda)
+const pcJuntar = path.join(PC_SRC, 'juntar.mjs')
+{
+  const mestre = fs.readFileSync(path.join(APP, 'juntar.js'))
+  const copia = fs.existsSync(pcJuntar) ? fs.readFileSync(pcJuntar) : Buffer.alloc(0)
+  ok(copia.length > mestre.length && copia.subarray(0, mestre.length).equals(mestre), 'juntar.mjs do PC começa idêntico ao juntar.js do celular, byte a byte')
+  const rodape = copia.subarray(mestre.length).toString('utf8')
+  ok(/^\s*export const \{ juntar, juntarDia, carimbar \} = \(typeof window !== 'undefined' \? window : globalThis\)\.JJ;?\s*$/.test(rodape), 'e o que vem depois é só o rodapé de export')
+}
 
 // sw.js: tudo o que a seção nova usa está no cache e existe no disco
 const sw = fs.readFileSync(path.join(APP, 'sw.js'), 'utf8')
 const lista = [...sw.slice(sw.indexOf('const ARQUIVOS'), sw.indexOf('];', sw.indexOf('const ARQUIVOS'))).matchAll(/'([^']+)'/g)].map((m) => m[1])
-for (const f of ['armazem.js', 'pc-sync.js', 'paginas.js', 'cifra.mjs', 'tiptap-html.mjs', 'tiptap-md.mjs']) ok(lista.includes(f), `sw.js guarda ${f} no cache`)
+for (const f of ['armazem.js', 'pc-sync.js', 'paginas.js', 'espelho.js', 'espelho-nucleo.mjs', 'juntar.js', 'cifra.mjs', 'tiptap-html.mjs', 'tiptap-md.mjs']) ok(lista.includes(f), `sw.js guarda ${f} no cache`)
 const faltam = lista.filter((f) => f !== './' && !fs.existsSync(path.join(APP, f)))
 ok(!faltam.length, 'todo arquivo listado em ARQUIVOS existe (um 404 derrubaria a instalação do cache)' + (faltam.length ? ': ' + faltam.join(', ') : ''))
 ok(/const VERSAO = '2\.86\.0'/.test(sw) && /const PUBLICADA = '2026-11-12T\d\d:\d\d'/.test(sw), 'sw.js: VERSAO 2.86.0 e PUBLICADA preenchidas')

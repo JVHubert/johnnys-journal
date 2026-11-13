@@ -2187,6 +2187,7 @@ window.aoSincronizar = async () => {
   await buscarLigacao();
   if (!antes && ligacao) { renderNovo(); sincTarefas(); }
   enviarFotosPendentes();
+  try { if (window.jjEspelho) window.jjEspelho.agendar(500); } catch (err) { /* o espelho nunca atrapalha */ }
 };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { sincTarefas(); renderInicio(); } });
 setInterval(() => { if (document.visibilityState === 'visible') sincTarefas(); }, 60000);
@@ -2194,6 +2195,16 @@ setInterval(() => { if (document.visibilityState === 'visible') sincTarefas(); }
 // ================= PÁGINAS DO PC (Etapa 2) =================
 // Seção nova e separada (paginas.js, pc-sync.js, armazem.js): só ela usa o IndexedDB "jj-dados". Se falhar ao carregar, o resto do app segue igual.
 import('./paginas.js').then((m) => m.iniciar({ abrirCamada, fecharCamada, abrirFolha, buscarLigacao, nuvem })).catch((err) => console.warn('páginas do PC indisponíveis:', err));
+
+// ================= ESPELHO CIFRADO DOS DADOS (Etapa 2, Fase 4c) =================
+// Segundo canal, em paralelo ao backup do GitHub: dias, notas, memórias, contadores, hábitos e plano também vão (cifrados) pela nuvem
+// e voltam do PC. Só roda com a chave dos dados aberta; sem ela nada muda. Junta com o mesmo juntar.js do GitHub (idempotente).
+import('./espelho.js').then((m) => m.iniciar({
+  demo: DEMO, nuvem, buscarLigacao,
+  lerDados: () => dados,
+  juntar: (local, remoto) => JJ.juntar(local, remoto),
+  aoAplicar: (junto) => { dados = junto; HABITOS = JJH.habitosDe(dados); fotoDias = copiaDias(dados.dias); salvar(); renderTudo(); },
+})).catch((err) => console.warn('espelho dos dados indisponível:', err));
 
 // ================= dados de exemplo (?demo) =================
 function tarefasDeExemplo() {
