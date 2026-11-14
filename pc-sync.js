@@ -111,6 +111,11 @@ async function trocar(ui, aoProgresso) {
   if (!chave) return { semChave: true }
   const resumo = { recebidos: 0, apagados: 0, enviados: 0, conflitos: 0, ilegiveis: 0, recusados: [], ignorados: 0 }
   let est = await A.lerEstado()
+  // Tipos novos (2.88.0: `pessoas`): a versão anterior pulava esses registros e andava o cursor por cima deles.
+  // Quando a lista de tipos muda, relê tudo uma vez desde o começo (só aplica o que for mais novo; nada se perde).
+  const TIPOS_VERSAO = [...TIPOS_DO_CELULAR].sort().join(',')
+  if (est.desde && est.tipos !== TIPOS_VERSAO) { est = { ...est, desde: 0, continuar: false } }
+  est = { ...est, tipos: TIPOS_VERSAO }
   const jaTentados = new Set() // recusados nesta troca não entram de novo no laço
   try {
     for (let volta = 0; volta < 30; volta++) {
