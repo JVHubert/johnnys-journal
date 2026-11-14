@@ -46,7 +46,7 @@ try {
   await ctx.route('https://jv11-news.jvhubert.workers.dev/**', (r) => {
     const u = new URL(r.request().url())
     if (u.pathname === '/b/lista.json') return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ edicoes: datas.map((d, i) => ({ data: d, minutos: 5 + (i % 3), manchete: i % 4 ? `Manchete do dia ${d}: o mundo segue girando e alguém decide alguma coisa` : null })) }) })
-    if (u.pathname === '/b/hoje.json') return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ data: datas[0], minutos: 5, manchete: 'Manchete de hoje' }) })
+    if (u.pathname === '/b/hoje.json') return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ data: datas[0], minutos: 4, manchete: 'Manchete de hoje', tweet: { frase: 'Washington tenta fechar duas guerras — e a política em casa cobra o preço. Hegseth enfrenta pedido de impeachment.', edicao: '865 lidas · 132 veículos · 15 histórias · 4 min', quando: 'sábado, 14 de novembro · 8h45' } }) })
     return r.fulfill({ status: 200, contentType: 'text/html', body: `<body style="background:#16191F;color:#eee;font:20px sans-serif;padding:20px">Boletim ${u.pathname}</body>` })
   })
   const page = await ctx.newPage()
@@ -54,6 +54,9 @@ try {
   page.on('pageerror', (e) => erros.push(e.message))
   await page.goto(URL_APP); await page.waitForTimeout(1500)
 
+  await page.waitForSelector('#ini-jv11-box .jv11-tweet', { timeout: 8000 })
+  ok(/Washington/.test(await page.textContent('#ini-jv11-box')), 'Início: o convite é o tweet do JV11, com o botão')
+  await page.$eval('#ini-jv11-box', (x) => x.scrollIntoView({ block: 'center' })); await page.screenshot({ path: path.join(PASTA_PRINTS, '00-convite-tweet.png') })
   // ---- aba News ----
   ok((await page.$$('.barra button')).length === 4, 'a barra continua com 4 botões')
   await page.click('.barra button[data-tela="journal"]'); await page.waitForSelector('#jor-espacos [data-e="@news"]')

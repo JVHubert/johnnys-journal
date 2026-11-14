@@ -1686,7 +1686,7 @@ let buscandoJv11 = false;
 async function atualizarJv11() {
   if (buscandoJv11 || DEMO) return;
   const k = chaveJv11();
-  if (!k || (jv11Hoje && jv11Hoje.quando && Date.now() - jv11Hoje.quando < 3600_000 && jv11Hoje.data === hoje())) return;
+  if (!k || (jv11Hoje && jv11Hoje.quando && 'tweet' in jv11Hoje && Date.now() - jv11Hoje.quando < 3600_000 && jv11Hoje.data === hoje())) return;
   buscandoJv11 = true;
   try {
     const r = await fetch(`${JV11_URL}/b/hoje.json?k=${encodeURIComponent(k)}`);
@@ -1845,8 +1845,19 @@ function renderJv11Inicio() {
   box.className = 'card jv11-card' + (lido ? ' lido' : '');
   box.innerHTML = lido
     ? `<div class="jv11-linha"><span>JV11 de hoje · lido</span><button class="link" id="jv11-ler">Reler ›</button></div>`
-    : `<small class="jv11-rotulo">JV11 de hoje</small><p class="jv11-manchete">${e(jv11Hoje.manchete || 'O boletim do dia está pronto.')}</p>
-       <button class="botao menta" id="jv11-ler">Ler${jv11Hoje.minutos ? ` em ${jv11Hoje.minutos} min` : ''}</button>`;
+    : (() => {
+      // O convite é o próprio tweet do JV11 que abre o boletim (foto, nome, frase do dia e os números), com o botão.
+      const tw = jv11Hoje.tweet || {};
+      const hora = (tw.quando || '').split('·').pop().trim();
+      return `<div class="jv11-tweet">
+        <img class="jv11-foto" src="icons/jv11.jpg" alt="" width="44" height="44">
+        <div class="jv11-corpo">
+          <p class="jv11-quem"><b>JV11</b><svg class="jv11-selo" viewBox="0 0 24 24" aria-label="verificado"><path fill="currentColor" d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81C14.67 2.63 13.43 1.750 12 1.75s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.9 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.910 2.19-3.34z"/><path fill="var(--painel)" d="M10.54 16.4l-3.6-3.6 1.42-1.41 2.18 2.18 4.93-4.93 1.41 1.41z"/></svg><span>@jv11news${hora ? ' · ' + e(hora) : ''}</span></p>
+          <p class="jv11-frase">${e(tw.frase || jv11Hoje.manchete || 'O boletim do dia está pronto.')}</p>
+          ${tw.edicao ? `<p class="jv11-edicao">${e(tw.edicao)}</p>` : ''}
+          <button class="botao menta" id="jv11-ler">Ler o boletim${jv11Hoje.minutos ? ` em ${jv11Hoje.minutos} min` : ''}</button>
+        </div></div>`;
+    })();
   $('jv11-ler').onclick = () => abrirBoletim(jv11Hoje.data);
 }
 
