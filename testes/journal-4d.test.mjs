@@ -82,6 +82,9 @@ try {
   }
   const foto = async (page, nome, opcoes = {}) => { if (PRINTS) { await page.waitForTimeout(900); await page.screenshot({ path: path.join(PASTA_PRINTS, nome), ...opcoes }) } }
   const todosOsCartoes = async (page, seletor = '#jor-mural .cartao-j') => {
+    // linha do tempo por mês sob demanda (2.89): só os meses perto da tela têm cartões; cada mês diz quantos itens tem (data-n)
+    const porMes = await page.evaluate(() => { const x = [...document.querySelectorAll('#jor-mural .lt-sec')]; return x.length ? x.reduce((t, e) => t + Number(e.dataset.n), 0) : null })
+    if (porMes !== null) return porMes
     for (let i = 0; i < 400; i++) {
       const tem = await page.evaluate(() => { const s = document.querySelector('#jor-mural .sentinela'); if (s) { s.scrollIntoView(); return true } return false })
       if (!tem) break

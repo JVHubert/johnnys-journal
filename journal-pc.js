@@ -10,6 +10,8 @@ import * as P from './paginas.js'
 import { indiceDeMencoes } from './mencoes.js'
 import { proximosAniversarios, aniversariosDoMes, diaEMes, listaDePessoas } from './pessoas.js'
 import { hojeTexto } from './datas.js'
+import * as LT from './linha-tempo.js'
+import * as G from './galeria.js'
 
 const $ = (id) => document.getElementById(id)
 const h = P.h
@@ -19,7 +21,7 @@ const MES3 = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'ou
 const MES_NOME = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 const PESSOAS_E_LUGARES = '@pessoas'
 
-let ui = null // ligações com o novo.js: { ESPACOS, itensJournal, cartao, atalhoEntrevista, mic }
+let ui = null // ligações com o novo.js: { ESPACOS, itensJournal, fotosJournal, cartao, atalhoEntrevista, abrirItem, abrirCamada, fecharCamada, abrirFolha, carregarFoto }
 const J = { espaco: 'journal', q: '', todos: false, filtro: 'tudo', sub: 'pessoas', seq: 0, men: null, mostrarSemMencao: false }
 let observador = null
 let calculando = null // a conta das menções em andamento (só uma por vez)
@@ -37,6 +39,8 @@ const PADRAO = [
 const posicao = (id) => { const i = P.ORDEM.indexOf(id); return i < 0 ? P.ORDEM.length : i }
 const ehTracker = (m) => m.origem === 'tracker' || String(m.id).startsWith('tracker-')
 const chaveDeMs = (ms) => { if (!ms) return ''; const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+/** Data dos cartões da linha do tempo: o ano aparece sempre ("5 nov 2026"). */
+const dataComAno = (k) => { if (!k) return ''; const [a, m, d] = k.split('-').map(Number); return `${d} ${MES3[m - 1]} ${a}` }
 const dataCurtaDeChave = (k) => {
   if (!k) return ''
   const [a, m, d] = k.split('-').map(Number)
@@ -106,7 +110,7 @@ function desenharSeletor(lista, contagens, aberto) {
 function escolher(id) {
   if (id === J.espaco) return
   J.espaco = id
-  if (id !== 'journal') J.filtro = 'tudo'
+  if (id !== 'journal' && J.filtro !== 'galeria') J.filtro = 'tudo' // a galeria acompanha a pessoa de um espaço para outro
   J.todos = false
   render(true)
 }
@@ -161,10 +165,12 @@ function desenharStatus() {
 
 function desenharFiltros(aberto) {
   const box = $('jor-filtros')
-  const ver = J.espaco === 'journal'
+  const ver = J.espaco !== PESSOAS_E_LUGARES
   box.hidden = !ver
   if (!ver) return
-  const chips = [['tudo', 'Tudo'], ...(aberto ? [['diario', 'Diário']] : []), ['entrevistas', 'Entrevistas'], ['notas', 'Notas'], ['galeria', 'Galeria']]
+  const chips = J.espaco === 'journal'
+    ? [['tudo', 'Tudo'], ...(aberto ? [['diario', 'Diário']] : []), ['entrevistas', 'Entrevistas'], ['notas', 'Notas'], ['galeria', 'Galeria']]
+    : [['tudo', 'Tudo'], ['galeria', 'Galeria']]
   if (!chips.some(([f]) => f === J.filtro)) J.filtro = 'tudo'
   box.innerHTML = chips.map(([f, nome]) => `<button type="button" data-f="${f}" aria-pressed="${f === J.filtro}">${nome}</button>`).join('')
   box.querySelectorAll('button').forEach((b) => (b.onclick = () => { J.filtro = b.dataset.f; render(false) }))
@@ -183,46 +189,80 @@ function cartaoPagina(x, lista, trecho = null) {
   const previa = trecho === null ? m.previa : ''
   const c = h(`<button type="button" class="cartao-j cartao-pc">
     <span class="cj-corpo"><span class="tipo">${esp.id === 'journal' ? 'Diário' : 'Página'}</span><b>${e(m.titulo || 'Sem título')}</b>${previa || trecho !== null ? `<span class="trecho">${e(previa || '')}</span>` : ''}
-    <span class="cj-pe"><i class="ponto-esp" style="background:${e(esp.cor || '#968073')}"></i>${e(dataCurtaDeChave(x.data))}${esp.id === 'journal' ? '' : ' · ' + e(esp.nome)}${m.pendente ? '<em class="pc-pend">esperando para subir</em>' : ''}</span></span>
+    <span class="cj-pe"><i class="ponto-esp" style="background:${e(esp.cor || '#968073')}"></i>${e(dataComAno(x.data))}${esp.id === 'journal' ? '' : ' · ' + e(esp.nome)}${m.pendente ? '<em class="pc-pend">esperando para subir</em>' : ''}</span></span>
   </button>`)
   c.onclick = () => P.abrirPagina(m.id)
   return c
 }
 
-function pintarItens(itens, lista, { meses = true, vazio = '', palavras = null, ondes = null } = {}) {
+/** Altura estimada de um cartão (px), antes de existir na tela. */
+function alturaDoItem(x) {
+  if (x.k === 'c') return (x.it.foto ? 150 : 0) + 60 + Math.min(220, x.it.texto.length) * 0.5 + (x.it.titulo.length > 28 ? 22 : 0)
+  return 60 + Math.min(160, (x.m.previa || '').length) * 0.5 + (x.m.titulo.length > 28 ? 22 : 0)
+}
+const GAP = 8
+/** Uma assinatura barata do que está na lista: se não mudou, a lista (e a rolagem) fica como está. */
+const assinaturaDe = (itens, lista) => `${itens.length}|${lista.map((x) => x.cor).join('')}|` + itens.map((x) => (x.k === 'c' ? x.it.id + ':' + (x.it.t || 0) + ':' + (x.it.foto || '') : x.m.id + ':' + (x.m.mudou || 0) + (x.m.pendente ? 'p' : ''))).join(',')
+
+/** A linha do tempo: um mês por seção, montado só quando chega perto da tela (linha-tempo.js). */
+function pintarLinhaDoTempo(itens, lista, { vazio, chave, reiniciar }) {
+  const mural = $('jor-mural')
+  if (!itens.length) {
+    LT.desmontar(); G.soltarTudo()
+    observador?.disconnect()
+    mural.innerHTML = ''; mural.classList.add('jor-novo'); mural.classList.remove('lt-mural')
+    mural.appendChild(h(`<p class="vazio jor-vazio">${vazio}</p>`))
+    return
+  }
+  G.soltarTudo()
+  const grupos = []
+  for (const x of itens) {
+    const mes = x.data ? x.data.slice(0, 7) : 'sem-data'
+    let g = grupos.at(-1)
+    if (!g || g.key !== mes) { const [a, m] = mes === 'sem-data' ? [0, 0] : mes.split('-').map(Number); g = { key: mes, ano: a, mes: m, n: 0, cols: [[], []], alt: [0, 0] }; grupos.push(g) }
+    const alt = alturaDoItem(x)
+    const col = g.alt[0] <= g.alt[1] ? 0 : 1
+    g.cols[col].push(x); g.alt[col] += alt + GAP; g.n++
+  }
+  for (const g of grupos) g.est = Math.max(g.alt[0], g.alt[1]) - GAP
+  observador?.disconnect()
+  LT.montar({
+    mural, chave, secoes: grupos, reiniciar, unidade: ['item', 'itens'],
+    estimar: (g) => g.est,
+    renderizar: (g, corpo) => {
+      const el = h('<div class="mural-secao"><div class="mural-col"></div><div class="mural-col"></div></div>')
+      g.cols.forEach((col, k) => { for (const x of col) el.children[k].appendChild(x.k === 'c' ? cartaoCelular(x, espDe(lista, x.esp).cor) : cartaoPagina(x, lista, null)) })
+      corpo.appendChild(el)
+    },
+    aoAbrirIrPara: abrirIrPara,
+  })
+}
+
+function pintarItens(itens, lista, { meses = true, vazio = '', palavras = null, ondes = null, chave = '', reiniciar = false } = {}) {
+  if (meses) { pintarLinhaDoTempo(itens, lista, { vazio, chave, reiniciar }); return }
+  LT.desmontar(); G.soltarTudo()
   const mural = $('jor-mural')
   observador?.disconnect()
   mural.innerHTML = ''
   mural.classList.add('jor-novo')
+  mural.classList.remove('lt-mural')
   if (!itens.length) { mural.appendChild(h(`<p class="vazio jor-vazio">${vazio}</p>`)); return }
-  let i = 0, sec = null
+  let i = 0
+  const el = h('<div class="mural-secao"><div class="mural-col"></div><div class="mural-col"></div></div>')
+  mural.appendChild(el)
+  const alt = [0, 0]
   const POR_VEZ = 40
-  const novaSecao = (mes) => {
-    if (meses && mes) {
-      const [a, m] = mes.split('-').map(Number)
-      mural.appendChild(h(`<h3 class="jor-mes">${MES_NOME[m - 1]}${a !== new Date().getFullYear() ? ' ' + a : ''}</h3>`))
-    } else if (meses) mural.appendChild(h('<h3 class="jor-mes">Sem data</h3>'))
-    const el = h('<div class="mural-secao"><div class="mural-col"></div><div class="mural-col"></div></div>')
-    mural.appendChild(el)
-    sec = { mes, cols: el.children, alt: [0, 0] }
-  }
-  if (!meses) novaSecao(null)
   const mais = () => {
     for (const fim = Math.min(itens.length, i + POR_VEZ); i < fim; i++) {
       const x = itens[i]
-      const mes = x.data ? x.data.slice(0, 7) : ''
-      if (meses && (!sec || sec.mes !== mes)) novaSecao(mes)
-      let c, alt
-      if (x.k === 'c') {
-        c = cartaoCelular(x, espDe(lista, x.esp).cor)
-        alt = (x.it.foto ? 150 : 0) + 60 + Math.min(220, x.it.texto.length) * 0.5 + (x.it.titulo.length > 28 ? 22 : 0)
-      } else {
+      let c
+      if (x.k === 'c') c = cartaoCelular(x, espDe(lista, x.esp).cor)
+      else {
         c = cartaoPagina(x, lista, palavras ? '' : null)
-        alt = 60 + Math.min(160, (x.m.previa || '').length) * 0.5 + (x.m.titulo.length > 28 ? 22 : 0)
         if (palavras) P.trechoDe(x.m, ondes?.get(x.m.id) ?? 0, palavras).then((t) => { const el = c.querySelector('.trecho'); if (el) { if (t) el.innerHTML = t; else el.remove() } })
       }
-      const col = sec.alt[0] <= sec.alt[1] ? 0 : 1
-      sec.cols[col].appendChild(c); sec.alt[col] += alt
+      const col = alt[0] <= alt[1] ? 0 : 1
+      el.children[col].appendChild(c); alt[col] += alturaDoItem(x)
     }
     if (i < itens.length) {
       const s = h('<div class="sentinela"></div>')
@@ -232,6 +272,121 @@ function pintarItens(itens, lista, { meses = true, vazio = '', palavras = null, 
     }
   }
   mais()
+}
+
+// ---------------------------------------------------------------- galeria: todas as imagens do espaço
+/** As imagens do espaço: as das páginas do PC (hashes guardados no resumo) e as fotos do celular. Mais recentes primeiro. */
+async function itensDaGaleria(lista, q) {
+  const U = P.estado()
+  const palavras = norm(q).split(/\s+/).filter(Boolean)
+  const doTitulo = (t) => !palavras.length || palavras.every((w) => norm(t).includes(w))
+  const doEspaco = (esp) => (J.todos && q ? true : esp === J.espaco)
+  const porHash = new Map()
+  if (U.aberto) {
+    const metas = await A.completarResumos()
+    for (const m of metas) {
+      if (ehTracker(m) || !m.imagens?.length) continue
+      const esp = m.espaco || 'inbox'
+      if (!doEspaco(esp) || !doTitulo(m.titulo || '')) continue
+      const data = m.data || chaveDeMs(m.quando)
+      for (const hash of m.imagens) {
+        const antes = porHash.get(hash)
+        // a mesma imagem em duas páginas aparece uma vez só, na página mais antiga
+        if (!antes || (data && (!antes.data || data < antes.data))) porHash.set(hash, { tipo: 'pc', hash, data, titulo: m.titulo || 'Sem título', metaId: m.id, esp })
+      }
+    }
+  }
+  const itens = [...porHash.values()]
+  const nPC = itens.length
+  let nCel = 0
+  for (const f of ui.fotosJournal()) {
+    const esp = f.it?.tipo === 'nota' ? espacoDaNota(f.espaco, lista) : 'journal'
+    if (!doEspaco(esp) || !doTitulo(f.titulo)) continue
+    itens.push({ tipo: 'cel', caminho: f.caminho, data: f.data || '', titulo: f.titulo, it: f.it, esp }); nCel++
+  }
+  itens.sort((a, b) => b.data.localeCompare(a.data))
+  return { itens, nPC, nCel }
+}
+const quantas = (n) => `${num(n)} ${n === 1 ? 'imagem' : 'imagens'}`
+function desenharEscopoGaleria(lista, q, g) {
+  const box = $('jor-escopo')
+  if (!box) return
+  const nome = espDe(lista, J.espaco).nome
+  const anos = g.itens.filter((x) => x.data).map((x) => Number(x.data.slice(0, 4)))
+  const de = anos.length ? Math.min(...anos) : 0, ate = anos.length ? Math.max(...anos) : 0
+  const resumo = !g.itens.length ? (q ? 'Nenhuma imagem com essa busca' : '') : `<b class="men-n">${quantas(g.itens.length)}</b> ${q ? 'em páginas com essa busca' : 'em ' + e(nome)}${de ? (de === ate ? `, de ${de}` : `, de ${de} a ${ate}`) : ''}.`
+  box.hidden = !resumo && !q
+  box.innerHTML = `<span>${resumo}</span>${q ? `<button type="button" class="link" data-a="escopo">${J.todos ? 'Só em ' + e(nome) : 'Procurar em todos'}</button>` : ''}`
+  box.querySelector('[data-a="escopo"]')?.addEventListener('click', () => { J.todos = !J.todos; render(false) })
+  box.classList.toggle('gal-resumo', !q)
+}
+async function desenharGaleria(lista, seq, q, trocou) {
+  const U = P.estado()
+  const mural = $('jor-mural')
+  if (U.aberto && !LT.montado()) {
+    // primeira vez com a chave: completar os resumos pode levar alguns segundos; mostra o que está acontecendo
+    mural.classList.remove('lt-mural'); mural.innerHTML = '<p class="vazio jor-vazio gal-preparando">Preparando a galeria…</p>'
+  }
+  const g = await itensDaGaleria(lista, q)
+  if (seq !== J.seq) return
+  desenharEscopoGaleria(lista, q, g)
+  const modo = `gal|${J.espaco}|${q}|${J.todos}`
+  if (!g.itens.length) {
+    LT.desmontar(); G.soltarTudo(); observador?.disconnect()
+    mural.classList.remove('lt-mural'); mural.classList.add('jor-novo')
+    mural.innerHTML = `<p class="vazio jor-vazio">${q ? 'Nenhuma imagem nas páginas com essa busca.' : U.aberto ? 'Nenhuma imagem neste espaço ainda.' : J.espaco === 'journal' ? 'Nenhuma foto do celular ainda.<br><small>Abra os dados do PC para ver também as imagens das páginas.</small>' : 'Nada seu neste espaço ainda. Abra os dados do PC para ver as imagens das páginas.'}</p>`
+    J.ultimoModo = modo
+    return
+  }
+  const secoes = G.secoesDaGaleria(g.itens)
+  const chave = `${modo}|${g.itens.length}|${g.itens.map((x) => (x.hash || x.caminho).slice(-6)).join('')}`
+  observador?.disconnect()
+  LT.montar({
+    mural, chave, secoes, reiniciar: trocou || J.ultimoModo !== modo, unidade: ['imagem', 'imagens'],
+    estimar: G.estimarGrade,
+    renderizar: (s, corpo) => G.montarMes(s, corpo, g.itens),
+    liberar: G.liberarMes,
+    aoAbrirIrPara: abrirIrPara,
+  })
+  J.ultimoModo = modo
+}
+
+// ---------------------------------------------------------------- a folha "Ir para…" (anos e meses, com contagens)
+function abrirIrPara() {
+  const anos = LT.anos()
+  if (!anos.length || !ui.abrirFolha) return
+  const [um, varios] = LT.unidade()
+  const atual = LT.secaoAtual()
+  const unidade = (n) => `${num(n)} ${n === 1 ? um : varios}`
+  const folha = h('<div class="ir-folha"><p class="folha-pergunta ir-titulo">Ir para…</p><div class="ir-corpo"></div></div>')
+  const corpo = folha.querySelector('.ir-corpo')
+  const titulo = folha.querySelector('.ir-titulo')
+  const pular = async (key) => { await ui.fecharCamada(); LT.irPara(key) }
+  const verAnos = () => {
+    titulo.textContent = 'Ir para…'
+    corpo.className = 'ir-corpo ir-anos'
+    corpo.innerHTML = ''
+    anos.forEach((a, k) => {
+      const b = h(`<button type="button" class="ir-ano${atual && (atual.ano || 0) === a.ano ? ' agora' : ''}" style="--i:${Math.min(k, 12)}"><b>${a.ano || 'Sem data'}</b><small>${unidade(a.n)}</small></button>`)
+      b.onclick = () => (a.ano ? verMeses(a) : pular(a.meses[0].key))
+      corpo.appendChild(b)
+    })
+  }
+  const verMeses = (a) => {
+    titulo.textContent = String(a.ano)
+    corpo.className = 'ir-corpo ir-meses'
+    corpo.innerHTML = '<button type="button" class="link ir-volta" data-a="anos">‹ Todos os anos</button>'
+    corpo.querySelector('[data-a="anos"]').onclick = verAnos
+    const porMes = new Map(a.meses.map((m) => [m.mes, m]))
+    for (let m = 1; m <= 12; m++) {
+      const d = porMes.get(m)
+      const b = h(`<button type="button" class="ir-mes${d ? '' : ' vazio-mes'}${atual && atual.ano === a.ano && atual.mes === m ? ' agora' : ''}" style="--i:${m}" ${d ? '' : 'disabled'}><b>${MES3[m - 1]}</b><small>${d ? num(d.n) : '·'}</small></button>`)
+      if (d) b.onclick = () => pular(d.key)
+      corpo.appendChild(b)
+    }
+  }
+  verAnos()
+  ui.abrirFolha(folha)
 }
 
 function animarTroca() {
@@ -246,15 +401,17 @@ function desenharEscopo(lista, q, total) {
   if (!box) return
   const ver = !!q && J.espaco !== PESSOAS_E_LUGARES
   box.hidden = !ver
+  box.classList.remove('gal-resumo')
   if (!ver) return
   const nome = espDe(lista, J.espaco).nome
   box.innerHTML = `<span>${total === 0 ? 'Nada' : num(total) + (total === 1 ? ' resultado' : ' resultados')} ${J.todos ? 'em todos os espaços' : 'em ' + e(nome)}.</span><button type="button" class="link" data-a="escopo">${J.todos ? 'Só em ' + e(nome) : 'Procurar em todos'}</button>`
   box.querySelector('[data-a="escopo"]').onclick = () => { J.todos = !J.todos; render(false) }
 }
 
-async function desenharEspaco(lista, seq) {
+async function desenharEspaco(lista, seq, trocou = false) {
   const U = P.estado()
   const q = J.q.trim()
+  if (J.filtro === 'galeria') { await desenharGaleria(lista, seq, q, trocou); return }
   const cel = itensDoCelular(), pc = itensDoPC()
   const doEspaco = (x) => J.todos && q ? true : x.esp === J.espaco
   const filtroOk = (x) => J.espaco !== 'journal' || J.filtro === 'tudo' || (J.filtro === 'diario' ? x.k === 'p' : x.k === 'p' ? false : J.filtro === 'entrevistas' ? x.it.tipo !== 'nota' : J.filtro === 'notas' ? x.it.tipo === 'nota' : !!x.it.foto)
@@ -286,9 +443,11 @@ async function desenharEspaco(lista, seq) {
   desenharEscopo(lista, '', 0)
   const itens = [...cel, ...pc].filter((x) => x.esp === J.espaco && filtroOk(x)).sort(ordem)
   const vazio = J.espaco === 'journal'
-    ? (J.filtro === 'galeria' ? 'Nenhuma nota com foto ainda.' : 'Nada aqui ainda. Faça a entrevista ou toque em + Nota.')
+    ? 'Nada aqui ainda. Faça a entrevista ou toque em + Nota.'
     : (U.aberto ? 'Este espaço está vazio.' : 'Nada seu neste espaço ainda. Abra os dados do PC para ver as páginas dele.')
-  pintarItens(itens, lista, { meses: true, vazio })
+  const modo = `tl|${J.espaco}|${J.filtro}`
+  pintarItens(itens, lista, { meses: true, vazio, chave: `${modo}|${assinaturaDe(itens, lista)}`, reiniciar: trocou || J.ultimoModo !== modo })
+  J.ultimoModo = modo
 }
 
 // ---------------------------------------------------------------- Pessoas e lugares
@@ -327,6 +486,7 @@ async function desenharPessoas(seq) {
   const mural = $('jor-mural')
   observador?.disconnect()
   mural.classList.add('jor-novo')
+  mural.classList.remove('lt-mural')
   mural.innerHTML = '<p class="vazio jor-vazio">Procurando nos dias do diário…</p>'
   const men = await mencoes()
   if (seq !== J.seq) return
@@ -487,7 +647,7 @@ export async function render(trocou = false) {
   ent.hidden = J.espaco !== 'journal'
   if (J.espaco === 'journal') ui.atalhoEntrevista()
   if (trocou) animarTroca()
-  if (emPessoas) { desenharEscopo(lista, '', 0); await desenharPessoas(seq) } else await desenharEspaco(lista, seq)
+  if (emPessoas) { LT.desmontar(); G.soltarTudo(); desenharEscopo(lista, '', 0); await desenharPessoas(seq) } else await desenharEspaco(lista, seq, trocou)
   void pendente
 }
 
@@ -519,6 +679,7 @@ export async function aniversarios() {
 
 export function iniciar(ligacoes) {
   ui = ligacoes
+  G.iniciar(ligacoes)
   const busca = $('jor-busca')
   let t
   busca.oninput = (ev) => { clearTimeout(t); const v = ev.target.value; t = setTimeout(() => { J.q = v; render(false) }, 120) }
@@ -526,6 +687,6 @@ export function iniciar(ligacoes) {
   $('jor-mural').classList.add('jor-novo')
   P.registrarVista('mencao', vistaMencao)
   P.aoMudar(aoMudarSecao)
-  window.JJ_JOR = { ativo: true, render: () => render(false), aniversarios, estado: () => ({ ...J, men: !!J.men }), medida: null, mencoes, mencaoMs: () => J.men?.ms || null }
+  window.JJ_JOR = { ativo: true, render: () => render(false), aniversarios, estado: () => ({ ...J, men: !!J.men }), medida: null, medidasLinhaDoTempo: LT.medidasDeRolagem, medidasGaleria: G.medidasDaGaleria, irPara: LT.irPara, mencoes, mencaoMs: () => J.men?.ms || null }
   render(false)
 }

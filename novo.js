@@ -875,9 +875,23 @@ function itensJournal() {
   }
   return out.sort((a, b) => (b.data || '').localeCompare(a.data || '') || b.t - a.t);
 }
+// Todas as fotos que nascem no celular, para a galeria do Journal: a ilustração/foto de cada item e as outras imagens de cada dia.
+// Cada uma leva o item que abre ao tocar em "Abrir a página" (o dia só aparece como item se tem entrevista ou tweet).
+function fotosJournal() {
+  const itens = itensJournal();
+  const porId = new Map(itens.map((it) => [it.id, it]));
+  const out = [], vistos = new Set();
+  const somar = (caminho, data, it, titulo, espaco, t) => { if (!caminho || vistos.has(caminho)) return; vistos.add(caminho); out.push({ caminho, data: data || '', it: it || null, titulo: titulo || '', espaco: espaco || 'journal', t: t || 0 }); };
+  for (const it of itens) if (it.foto) somar(it.foto, it.data, it, it.titulo, it.espaco, it.t);
+  for (const [k, d] of Object.entries(dados.dias || {})) {
+    const it = porId.get('dia-' + k) || null;
+    for (const x of (d.imagens || [])) if (x && x.foto) somar(x.foto, k, it, it ? it.titulo : `Fotos de ${k.slice(8)}/${k.slice(5, 7)}`, 'journal', x.t || d.t);
+  }
+  return out;
+}
 const ROTULO_TIPO = { entrevista: `<span class="tipo violeta">${mic(13)} Entrevista</span>`, tweet: '<span class="tipo violeta">Tweet do dia</span>', nota: '<span class="tipo">Nota</span>' };
 const NOME_TIPO = { entrevista: 'Entrevista', tweet: 'Tweet do dia', nota: 'Nota' };
-const dataBonita = (k) => { if (!k) return ''; const d = deChave(k); return `${d.getDate()} ${MES3[d.getMonth()]}${d.getFullYear() !== deChave(hoje()).getFullYear() ? ' ' + d.getFullYear() : ''}`; };
+const dataBonita = (k) => { if (!k) return ''; const d = deChave(k); return `${d.getDate()} ${MES3[d.getMonth()]} ${d.getFullYear()}`; }; // o ano aparece sempre (pedido do JV, 14/11)
 
 function cartao(it) {
   const esp = espaco(it.espaco);
@@ -2238,7 +2252,7 @@ setInterval(() => { if (document.visibilityState === 'visible') sincTarefas(); }
 // Seção nova e separada (paginas.js, pc-sync.js, armazem.js): só ela usa o IndexedDB "jj-dados". Se falhar ao carregar, o resto do app segue igual.
 import('./paginas.js').then((m) => m.iniciar({ abrirCamada, fecharCamada, abrirFolha, buscarLigacao, nuvem })).catch((err) => console.warn('páginas do PC indisponíveis:', err));
 // A aba Journal organizada como o PC (espaços, linha do tempo única, Pessoas e lugares). Se não carregar, vale o Journal de antes.
-import('./journal-pc.js').then((m) => m.iniciar({ ESPACOS, itensJournal, cartao, atalhoEntrevista, mudouAlgo: () => pintarAniversarios() })).catch((err) => console.warn('Journal por espaços indisponível:', err));
+import('./journal-pc.js').then((m) => m.iniciar({ ESPACOS, itensJournal, fotosJournal, cartao, atalhoEntrevista, abrirItem, abrirCamada, fecharCamada, abrirFolha, carregarFoto, mudouAlgo: () => pintarAniversarios() })).catch((err) => console.warn('Journal por espaços indisponível:', err));
 
 // ================= ESPELHO CIFRADO DOS DADOS (Etapa 2, Fase 4c) =================
 // Segundo canal, em paralelo ao backup do GitHub: dias, notas, memórias, contadores, hábitos e plano também vão (cifrados) pela nuvem

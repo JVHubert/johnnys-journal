@@ -45,7 +45,7 @@ const pcJuntar = path.join(PC_SRC, 'juntar.mjs')
 // sw.js: tudo o que a seção nova usa está no cache e existe no disco
 const sw = fs.readFileSync(path.join(APP, 'sw.js'), 'utf8')
 const lista = [...sw.slice(sw.indexOf('const ARQUIVOS'), sw.indexOf('];', sw.indexOf('const ARQUIVOS'))).matchAll(/'([^']+)'/g)].map((m) => m[1])
-for (const f of ['armazem.js', 'pc-sync.js', 'paginas.js', 'journal-pc.js', 'mencoes.js', 'pessoas.js', 'texto.js', 'espelho.js', 'espelho-nucleo.mjs', 'juntar.js', 'cifra.mjs', 'tiptap-html.mjs', 'tiptap-md.mjs']) ok(lista.includes(f), `sw.js guarda ${f} no cache`)
+for (const f of ['armazem.js', 'pc-sync.js', 'paginas.js', 'journal-pc.js', 'linha-tempo.js', 'galeria.js', 'mencoes.js', 'pessoas.js', 'texto.js', 'espelho.js', 'espelho-nucleo.mjs', 'juntar.js', 'cifra.mjs', 'tiptap-html.mjs', 'tiptap-md.mjs']) ok(lista.includes(f), `sw.js guarda ${f} no cache`)
 const faltam = lista.filter((f) => f !== './' && !fs.existsSync(path.join(APP, f)))
 ok(!faltam.length, 'todo arquivo listado em ARQUIVOS existe (um 404 derrubaria a instalação do cache)' + (faltam.length ? ': ' + faltam.join(', ') : ''))
 ok(/const VERSAO = '\d+\.\d+\.\d+'/.test(sw) && /const PUBLICADA = '\d{4}-\d\d-\d\dT\d\d:\d\d'/.test(sw), 'sw.js: VERSAO e PUBLICADA preenchidas (o teste antigo exigia 2.86.0 e já falhava na 2.87.0)')

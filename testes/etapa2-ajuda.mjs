@@ -17,8 +17,9 @@ const BLOCO = path.resolve(aqui, '../../../../2026.10.03 Bloco de Notas/01 Proje
 export const PC_SRC = path.join(BLOCO, 'bloco-de-notas-2/src')
 const NUVEM_PASTA = path.join(BLOCO, 'ditado-nuvem')
 const REAIS = process.env.BLOCO_DADOS_REAIS || path.join(BLOCO, 'dados')
-export const PORTA_NUVEM = 8861
-export const PORTA_APP = 8862
+export const PORTA_NUVEM = Number(process.env.JJ_PORTA_NUVEM || 8861)
+export const PORTA_APP = Number(process.env.JJ_PORTA_APP || 8862)
+export const REAIS_DADOS = REAIS
 export const NUVEM = `http://127.0.0.1:${PORTA_NUVEM}`
 export const SEGREDO = 'teste'
 export const SENHA = 'senha-de-teste-123'
@@ -45,9 +46,10 @@ async function esperar(sonda, quanto = 180_000) {
 }
 const pegar = (url) => new Promise((ok, falha) => { http.get(url, { agent: agente }, (r) => { r.resume(); r.on('end', () => (r.statusCode < 500 ? ok() : falha(new Error('status ' + r.statusCode)))) }).on('error', falha) })
 
-export async function subirServidores() {
+/** `r2: true` liga o armazenamento de arquivos (R2 de mentira, local) na nuvem de teste: para os testes com imagens. */
+export async function subirServidores({ r2 = false } = {}) {
   const toml = path.join(temp, 'wrangler-teste.toml')
-  fs.writeFileSync(toml, `name = "jv-ditado-teste"\nmain = "${path.join(NUVEM_PASTA, 'index.js').replace(/\\/g, '/')}"\ncompatibility_date = "2026-09-01"\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "jv-journal"\ndatabase_id = "00000000-0000-0000-0000-000000000000"\n[vars]\nURL_PUBLICA = "${NUVEM}"\nSEGREDO = "${SEGREDO}"\n`)
+  fs.writeFileSync(toml, `name = "jv-ditado-teste"\nmain = "${path.join(NUVEM_PASTA, 'index.js').replace(/\\/g, '/')}"\ncompatibility_date = "2026-09-01"\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "jv-journal"\ndatabase_id = "00000000-0000-0000-0000-000000000000"\n${r2 ? '[[r2_buckets]]\nbucket_name = "jv-journal-arquivos"\nbinding = "ARQUIVOS"\n' : ''}[vars]\nURL_PUBLICA = "${NUVEM}"\nSEGREDO = "${SEGREDO}"\n`)
   const wr = spawn('npx', ['--yes', 'wrangler@latest', 'dev', '--local', '--config', toml, '--port', String(PORTA_NUVEM), '--persist-to', path.join(temp, 'estado-nuvem')], { cwd: NUVEM_PASTA, shell: true, stdio: ['ignore', 'pipe', 'pipe'] })
   filhos.push(wr)
   wr.stdout.on('data', (d) => { logWr += d }); wr.stderr.on('data', (d) => { logWr += d })

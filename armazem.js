@@ -118,6 +118,50 @@ export async function contar() {
   return { paginas: metas.length, porEspaco: por, espacos: (await listarEspacos()).length, pendentes: metas.filter((m) => m.pendente).length }
 }
 
+// ---------------------------------------------------------------- imagens de uma página (para a galeria)
+const RE_IMAGEM = /^\/imagens\/([\w-]+)(?:\.\w+)?$/
+/** Os hashes das imagens que a página usa (capa e nós `image` com src "/imagens/<hash>.<ext>"), sem repetir, na ordem em que aparecem. */
+export function hashesDoPg(pg) {
+  const out = [], vistos = new Set()
+  const somar = (src) => { const m = RE_IMAGEM.exec(String(src || '')); if (m && !vistos.has(m[1])) { vistos.add(m[1]); out.push(m[1]) } }
+  somar(pg?.capa)
+  ;(function andar(n) {
+    if (!n || typeof n !== 'object') return
+    if (n.type === 'image') somar(n.attrs?.src)
+    if (Array.isArray(n.content)) for (const f of n.content) andar(f)
+  })(pg?.doc)
+  return out
+}
+
+let completando = null
+/**
+ * Resumos gravados antes da 2.88 não têm `etiquetas`/`lugar`; antes da galeria não têm `imagens` (a lista de hashes das imagens da página).
+ * Completa UMA vez, lendo só esses de `conteudo` (em pedaços), e grava no resumo: da próxima vez nada é relido.
+ * Devolve os resumos vivos já completos.
+ */
+export function completarResumos(aoProgresso = null) {
+  if (completando) return completando
+  completando = (async () => {
+    let metas = await listarMetas()
+    const faltam = metas.filter((m) => m.lugar === undefined || m.imagens === undefined)
+    if (!faltam.length) return metas
+    const PEDACO = 150
+    for (let i = 0; i < faltam.length; i += PEDACO) {
+      const novas = []
+      await transacao(['conteudo'], 'readonly', async (t) => {
+        for (const m of faltam.slice(i, i + PEDACO)) {
+          const c = await pedido(t.objectStore('conteudo').get(m.id))
+          novas.push({ ...m, etiquetas: m.etiquetas || c?.pg?.etiquetas || [], lugar: m.lugar === undefined ? (c?.pg?.lugar || null) : m.lugar, imagens: hashesDoPg(c?.pg) })
+        }
+      })
+      await gravarLote({ metas: novas })
+      aoProgresso?.(Math.min(faltam.length, i + PEDACO), faltam.length)
+    }
+    return listarMetas()
+  })().finally(() => { completando = null })
+  return completando
+}
+
 /**
  * As páginas no formato que o mencoes.js (cópia do PC) espera: { id, titulo, previa, etiquetas, lugar, espaco, data }.
  * A `previa` é montada como a do PC (título, quebra de linha e o começo do texto, 240 caracteres), a partir da loja `textos`:
@@ -125,19 +169,7 @@ export async function contar() {
  * Resumos gravados antes da 2.88 não têm `etiquetas`/`lugar`: completa uma vez, lendo só esses de `conteudo`.
  */
 export async function paginasParaMencoes(espacoDiario) {
-  let metas = await listarMetas()
-  const faltam = metas.filter((m) => m.lugar === undefined)
-  if (faltam.length) {
-    const novas = []
-    await transacao(['conteudo'], 'readonly', async (t) => {
-      for (const m of faltam) {
-        const c = await pedido(t.objectStore('conteudo').get(m.id))
-        novas.push({ ...m, etiquetas: c?.pg?.etiquetas || [], lugar: c?.pg?.lugar || null })
-      }
-    })
-    await gravarLote({ metas: novas })
-    metas = await listarMetas()
-  }
+  const metas = await completarResumos()
   const doDiario = (m) => m.espaco === espacoDiario && m.data
   // só os textos das páginas do diário (as outras nem precisam de prévia): leituras em paralelo, numa transação só
   const textos = new Map()

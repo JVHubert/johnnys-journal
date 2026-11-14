@@ -100,6 +100,8 @@ export const abrirDesbloqueio = () => abrirNa('abrir')
 export const registrarVista = (nome, fn) => { VISTAS[nome] = fn }
 export const abrirVista = abrirNa
 export const atualizarAgora = () => { S.esquecerFaltantes(); return iniciarSinc() }
+/** Blob URL da imagem de uma página do PC (`tipo`: 'mini' ou 'img'), ou null se ainda não chegou. Usado pela galeria. */
+export const imagemDoPC = (hash, tipo) => S.imagemSrc(hash, tipo, UI)
 export function ir(nome, args = {}) {
   const atual = pilha.at(-1)
   if (atual) atual.rolagem = sobre.scrollTop
