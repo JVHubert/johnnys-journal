@@ -826,16 +826,19 @@ async function falaParaTexto(blob, extra) {
   }
 }
 async function textoPeloGroq(blob) {
-  const form = new FormData();
-  form.append('file', blob, `ditado.${/wav/.test(blob.type) ? 'wav' : /ogg/.test(blob.type) ? 'ogg' : 'webm'}`);
-  form.append('model', 'whisper-large-v3-turbo');
-  form.append('language', 'pt');
-  form.append('response_format', 'json');
-  form.append('temperature', '0');
-  form.append('prompt', GROQ_CONTEXTO);
-  const r = await fetch(GROQ_URL, { method: 'POST', headers: { Authorization: `Bearer ${chaveGroq()}` }, body: form });
-  if (!r.ok) throw new Error(r.status === 401 ? 'o Groq recusou a chave' : r.status === 429 ? 'o Groq também chegou no limite por agora' : 'Groq ' + r.status);
-  return ((await r.json()).text || '').trim();
+  const r = await JJG.transcreverGroq(async (modelo) => {
+    const form = new FormData();
+    form.append('file', blob, `ditado.${/wav/.test(blob.type) ? 'wav' : /ogg/.test(blob.type) ? 'ogg' : 'webm'}`);
+    form.append('model', modelo);
+    form.append('language', 'pt');
+    form.append('response_format', 'verbose_json');
+    form.append('temperature', '0');
+    form.append('prompt', GROQ_CONTEXTO);
+    const res = await fetch(GROQ_URL, { method: 'POST', headers: { Authorization: `Bearer ${chaveGroq()}` }, body: form });
+    if (!res.ok) throw new Error(res.status === 401 ? 'o Groq recusou a chave' : res.status === 429 ? 'o Groq também chegou no limite por agora' : 'Groq ' + res.status);
+    return res.json();
+  });
+  return r.texto;
 }
 // Um pedaço de áudio vira texto no serviço do Journal. Pedaço sem fala não é erro: só não tem texto.
 const enviarParaTexto = (blob) => falaParaTexto(blob, { hoje: hoje(), projetos: [], etiquetas: [], app: 'tracker', soTexto: true })
@@ -1008,6 +1011,9 @@ function abrirItem(it) {
   const hora = it.nota && it.nota.criada ? new Date(it.nota.criada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
   const quando = d ? d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== deChave(hoje()).getFullYear() ? { year: 'numeric' } : {}) }).replace('-feira', '') : '';
   const ehNota = it.tipo === 'nota';
+  // Áudio original da entrevista/memória (audio.js): barra "Ouvir a gravação" com o texto de tempos andando junto.
+  const entrAudio = it.memoria || (it.dia ? lerDia(it.dia).entrevista : null);
+  const audiosDoItem = window.JJAudio && entrAudio ? window.JJAudio.audiosDe(entrAudio) : [];
   const ehEntDia = it.tipo === 'entrevista' && !!it.dia && !it.memoria;
   const outras = it.dia ? (lerDia(it.dia).imagens || []) : [];
   const el = h(`<article class="nota-aberta">
@@ -1022,6 +1028,7 @@ function abrirItem(it) {
       <p class="na-tipo"><i style="background:${esp.cor}"></i>${NOME_TIPO[it.tipo]} · ${e(esp.nome)}</p>
       <h1>${e(it.titulo || 'Sem título')}</h1>
       <p class="na-data">${e(quando)}${hora ? ' · ' + hora : ''}</p>
+      ${audiosDoItem.length ? '<div class="na-audio"></div>' : ''}
       <div class="na-texto">${corpo}</div>
     </div>
     <div class="na-pe">
@@ -1093,7 +1100,17 @@ function abrirItem(it) {
     };
     abrirFolha(menu);
   };
-  abrirCheia(el);
+  let player = null;
+  const alvoAudio = el.querySelector('.na-audio');
+  if (alvoAudio) {
+    const temasA = ENTREVISTAS[(entrAudio && entrAudio.modo) || 'dia'] || [];
+    player = window.JJAudio.montarPlayer(alvoAudio, audiosDoItem, {
+      ui: { buscarLigacao },
+      rotulo: (a, i) => (a.passo != null && temasA[a.passo] ? temasA[a.passo].tema : 'Gravação ' + (i + 1)),
+      reduzirMovimento: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    });
+  }
+  abrirCheia(el, () => { if (player) player.parar(); });
 }
 
 // ---------- entrevista no dia errado: muda de dia ----------
@@ -1440,80 +1457,222 @@ function abrirIlustracao(k) {
   const d = deChave(k);
   const quando = d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).replace('-feira', '');
   const escolhida = (lerDia(k).ilustracao || {}).foto;
+  // Rascunho do dia (só na memória): as ideias, as já mostradas e o último desenho, para não pedir de novo ao voltar.
+  const rasc = rascunhosIlustra[k] || (rascunhosIlustra[k] = { ideias: null, mostradas: [], desenho: null, estado: 'ideias' });
   const el = h(`<article class="ilustra">
-    <div class="na-barra"><button class="icone-b" data-a="voltar" aria-label="Voltar">‹</button><span></span></div>
+    <div class="na-barra"><button class="icone-b" data-a="atras" aria-label="Voltar">‹</button><span></span></div>
     <div class="il-corpo">
       <p class="il-data">${e(quando)}</p>
-      <h1>Ilustração do dia</h1>
-      <div class="il-quadro"><img alt="" hidden><p class="il-espera" role="status"></p></div>
-      <p class="il-cena"></p>
-      <label class="il-ajuste" hidden>O que mudar? <span>(opcional)</span>
-        <input class="campo" maxlength="300" placeholder="ex.: só eu e meu pai, mais de longe"></label>
-      <div class="il-botoes" hidden>
-        <button class="botao menta grande" data-a="usar">Usar esta</button>
-        <button class="botao cinza grande" data-a="outra">Fazer outra</button>
+      <h1 class="il-titulo"></h1>
+      <p class="il-sub"></p>
+
+      <section data-e="ideias">
+        <div class="il-ideias" role="list"></div>
+        <label class="il-propria">Ou escreva a sua cena
+          <input class="campo" maxlength="300" placeholder="ex.: meu pai escolhendo a picanha"></label>
+        <div class="il-botoes">
+          <button class="botao menta grande" data-a="propria" hidden>Desenhar a minha cena</button>
+          <button class="botao cinza grande" data-a="mais">Outras 3 ideias</button>
+        </div>
+      </section>
+
+      <section data-e="desenho" hidden>
+        <div class="il-quadro"><img alt="" hidden>
+          <svg class="il-lapis" viewBox="0 0 300 120" aria-hidden="true" preserveAspectRatio="none"><path d="M8 88 C 40 20, 70 110, 110 60 S 170 30, 200 74 S 255 100, 292 38"/><path d="M14 104 C 60 80, 100 118, 150 92 S 230 70, 288 102"/></svg>
+          <p class="il-espera" role="status"></p></div>
+        <p class="il-cena"></p>
+        <label class="il-ajuste" hidden>O que mudar? <span>(opcional)</span>
+          <input class="campo" maxlength="300" placeholder="ex.: só eu e meu pai, mais de longe"></label>
+        <div class="il-botoes" hidden>
+          <button class="botao menta grande" data-a="usar">Usar esta</button>
+          <button class="botao cinza grande" data-a="outra">Fazer outra</button>
+          <button class="link il-voltar-ideias" data-a="ideias">Voltar às ideias</button>
+        </div>
+      </section>
+
+      <section data-e="instrucoes" hidden>
+        <label class="il-instr">Como escolher a cena
+          <textarea class="il-instr-escolha" rows="8" maxlength="4000"></textarea></label>
+        <label class="il-instr">Estilo do desenho <span>(em inglês: o desenhista entende melhor)</span>
+          <textarea class="il-instr-estilo" rows="8" maxlength="4000" lang="en"></textarea></label>
+        <p class="il-instr-msg meta" role="status"></p>
+        <div class="il-botoes">
+          <button class="botao menta grande" data-a="salvar-instr">Salvar</button>
+          <button class="botao cinza grande" data-a="padrao-instr">Voltar ao padrão</button>
+        </div>
+      </section>
+
+      <div class="il-rodape">
+        <button class="link il-galeria" data-a="galeria">Usar uma foto da galeria</button>
+        <button class="link il-agora-nao" data-a="fechar">${escolhida ? 'Manter a que eu já tinha' : 'Agora não'}</button>
+        <button class="link il-ver-instr" data-a="instr">Ver as instruções da IA</button>
       </div>
-      <button class="link il-galeria" data-a="galeria">Usar uma foto da galeria</button>
-      <button class="link il-agora-nao" data-a="voltar">${escolhida ? 'Manter a que eu já tinha' : 'Agora não'}</button>
     </div>
   </article>`);
-  const img = el.querySelector('.il-quadro img');
-  const espera = el.querySelector('.il-espera');
-  const cena = el.querySelector('.il-cena');
-  const ajuste = el.querySelector('.il-ajuste input');
-  const botoes = el.querySelector('.il-botoes');
-  let atualIl = null, pedindo = false;
+  const $e = (s) => el.querySelector(s);
+  const secao = (n) => $e(`[data-e="${n}"]`);
+  const quadro = $e('.il-quadro'), img = $e('.il-quadro img'), espera = $e('.il-espera'), cena = $e('.il-cena');
+  const ajuste = $e('.il-ajuste input'), propria = $e('.il-propria input');
+  const botoesDesenho = $e('[data-e="desenho"] .il-botoes');
+  const lista = $e('.il-ideias');
+  const TITULOS = {
+    ideias: ['O que eu desenharia', 'Escolha uma ideia. Só desenho depois do seu toque.'],
+    desenho: ['Ilustração do dia', ''],
+    instrucoes: ['Instruções da IA', 'Mude como a IA escolhe a cena e o estilo do desenho. Vale para os próximos desenhos.'],
+  };
+  let ocupado = false, voltarPara = 'ideias';
 
+  const ir = (estado) => {
+    if (estado !== 'instrucoes') rasc.estado = estado;
+    for (const s of ['ideias', 'desenho', 'instrucoes']) secao(s).hidden = s !== estado;
+    $e('.il-titulo').textContent = TITULOS[estado][0];
+    $e('.il-sub').textContent = TITULOS[estado][1]; $e('.il-sub').hidden = !TITULOS[estado][1];
+    $e('.il-ver-instr').hidden = estado === 'instrucoes';
+    $e('.il-galeria').hidden = estado === 'instrucoes';
+    $e('.il-agora-nao').hidden = estado === 'instrucoes';
+    $e('.il-corpo').scrollIntoView({ block: 'start' });
+  };
+  const erroBonito = (err) => {
+    const msg = String(err.message || err);
+    return COTA_ACABOU.test(msg) ? 'Os desenhos grátis de hoje acabaram. Tente de novo amanhã.'
+      : msg === 'sem-ligacao' || err instanceof TypeError ? 'Sem conexão com o serviço do Journal. Tente quando tiver internet.'
+      : 'Não consegui agora (' + msg + ').';
+  };
+
+  // ----- ideias -----
+  const desenharIdeias = (ideias) => {
+    lista.innerHTML = '';
+    ideias.forEach((ideia, i) => {
+      const b = h(`<button class="il-ideia" role="listitem" style="--i:${i}"><span class="il-num" aria-hidden="true">${i + 1}</span><span class="il-ideia-txt"></span><span class="il-toque">Toque para desenhar</span></button>`);
+      b.querySelector('.il-ideia-txt').textContent = ideia.cena;
+      b.onclick = () => desenhar({ cena: ideia.cena, cenaEn: ideia.cenaEn });
+      lista.appendChild(b);
+    });
+  };
+  const esqueletos = () => {
+    lista.innerHTML = [0, 1, 2].map((i) => `<div class="il-ideia esqueleto" style="--i:${i}" aria-hidden="true"><span class="il-num">${i + 1}</span><span class="il-linha"></span></div>`).join('');
+  };
+  const pedirIdeias = async () => {
+    if (ocupado) return;
+    ocupado = true;
+    esqueletos();
+    $e('.il-sub').textContent = 'Lendo o seu dia para pensar em três cenas…';
+    $e('[data-a="mais"]').disabled = true;
+    try {
+      const r = await nuvem('/ilustracao/ideias', { texto, anteriores: rasc.mostradas.slice(-9) });
+      rasc.ideias = r.ideias;
+      r.ideias.forEach((i) => rasc.mostradas.push(i.cena));
+      desenharIdeias(r.ideias);
+      $e('.il-sub').textContent = TITULOS.ideias[1];
+    } catch (err) {
+      lista.innerHTML = '';
+      const p = h('<p class="il-erro" role="alert"></p>'); p.textContent = erroBonito(err); lista.appendChild(p);
+      $e('.il-sub').textContent = '';
+    } finally { ocupado = false; $e('[data-a="mais"]').disabled = false; }
+  };
+
+  // ----- desenho -----
   const mostrar = (r) => {
-    atualIl = r;
+    rasc.desenho = r;
     img.src = 'data:image/png;base64,' + r.imagem; img.hidden = false;
     espera.textContent = ''; espera.hidden = true;
-    el.querySelector('.il-quadro').classList.remove('desenhando');
+    quadro.classList.remove('desenhando');
     cena.textContent = r.cena || '';
-    el.querySelector('.il-ajuste').hidden = false; botoes.hidden = false;
+    $e('.il-ajuste').hidden = false; botoesDesenho.hidden = false;
+    botoesDesenho.querySelectorAll('.botao').forEach((b) => (b.hidden = false));
   };
-  const pedir = async () => {
-    if (pedindo) return;
-    pedindo = true;
-    el.querySelector('.il-quadro').classList.add('desenhando');
-    espera.hidden = false; espera.textContent = atualIl ? 'Desenhando outra versão…' : 'Lendo o seu dia e desenhando… (uns 5 segundos)';
-    botoes.querySelectorAll('button').forEach((b) => (b.disabled = true));
+  // pedido: { cena, cenaEn } (uma ideia pronta) ou { ajuste } (a IA refaz a escolha com o pedido do JV)
+  const desenhar = async (pedido) => {
+    if (ocupado) return;
+    ocupado = true;
+    ir('desenho');
+    const refazendo = !!rasc.desenho && pedido.refazer;
+    quadro.classList.add('desenhando');
+    if (!refazendo) { img.hidden = true; img.removeAttribute('src'); cena.textContent = pedido.cena || ''; $e('.il-ajuste').hidden = true; botoesDesenho.hidden = true; rasc.desenho = null; }
+    espera.hidden = false; espera.textContent = refazendo ? 'Desenhando outra versão…' : 'Desenhando… (uns 5 segundos)';
+    botoesDesenho.querySelectorAll('button').forEach((b) => (b.disabled = true));
     try {
-      const r = await nuvem('/ilustracao-do-dia', { texto, ajuste: ajuste.value.trim(), cenaAnterior: atualIl ? atualIl.cenaEn : '' });
-      rascunhosIlustra[k] = r;
+      const corpo = pedido.cenaEn ? { cena: pedido.cena, cenaEn: pedido.cenaEn }
+        : { texto, ajuste: pedido.ajuste || '', cenaAnterior: pedido.cenaAnterior || '' };
+      const r = await nuvem('/ilustracao-do-dia', corpo);
+      mostrar({ ...r, ideia: pedido.cenaEn ? { cena: pedido.cena, cenaEn: pedido.cenaEn } : { cena: r.cena, cenaEn: r.cenaEn } });
       ajuste.value = '';
-      mostrar(r);
     } catch (err) {
-      const msg = String(err.message || err);
-      espera.textContent = COTA_ACABOU.test(msg) ? 'Os desenhos grátis de hoje acabaram. Tente de novo amanhã.'
-        : msg === 'sem-ligacao' || err instanceof TypeError ? 'Sem conexão com o serviço do Journal. Tente quando tiver internet.'
-        : 'Não consegui desenhar agora (' + msg + ').';
-      if (atualIl) { img.hidden = false; botoes.hidden = false; }
-      el.querySelector('.il-quadro').classList.remove('desenhando');
+      espera.textContent = erroBonito(err);
+      if (rasc.desenho) { img.hidden = false; botoesDesenho.hidden = false; $e('.il-ajuste').hidden = false; }
+      else { botoesDesenho.hidden = false; botoesDesenho.querySelectorAll('.botao').forEach((b) => (b.hidden = true)); }   // sem desenho ainda: só "Voltar às ideias"
+      quadro.classList.remove('desenhando');
     } finally {
-      pedindo = false;
-      botoes.querySelectorAll('button').forEach((b) => (b.disabled = false));
+      ocupado = false;
+      botoesDesenho.querySelectorAll('button').forEach((b) => (b.disabled = false));
     }
   };
-  el.querySelectorAll('[data-a="voltar"]').forEach((b) => (b.onclick = fecharCamada));
-  el.querySelector('[data-a="outra"]').onclick = pedir;
-  el.querySelector('[data-a="usar"]').onclick = async () => {
-    if (!atualIl) return;
-    const blob = await reduzir(await base64ParaBlob(atualIl.imagem), 1600);
-    await guardarImagemDoDia(k, blob, atualIl.cena || '');
+
+  // ----- instruções da IA -----
+  const carregarInstrucoes = async () => {
+    const msg = $e('.il-instr-msg');
+    msg.textContent = 'Carregando…';
+    try {
+      const r = await nuvem('/ilustracao/instrucoes', null, 'GET');
+      $e('.il-instr-escolha').value = r.escolha; $e('.il-instr-estilo').value = r.estilo;
+      msg.textContent = '';
+    } catch (err) { msg.textContent = erroBonito(err); }
+  };
+  $e('[data-a="instr"]').onclick = () => { voltarPara = rasc.estado; ir('instrucoes'); carregarInstrucoes(); };
+  $e('[data-a="salvar-instr"]').onclick = async () => {
+    const msg = $e('.il-instr-msg');
+    try {
+      await nuvem('/ilustracao/instrucoes', { escolha: $e('.il-instr-escolha').value, estilo: $e('.il-instr-estilo').value });
+      msg.textContent = 'Salvo. Vale a partir das próximas ideias e desenhos.';
+    } catch (err) { msg.textContent = erroBonito(err); }
+  };
+  $e('[data-a="padrao-instr"]').onclick = async () => {
+    const msg = $e('.il-instr-msg');
+    try {
+      const r = await nuvem('/ilustracao/instrucoes', { padrao: true });
+      $e('.il-instr-escolha').value = r.escolha; $e('.il-instr-estilo').value = r.estilo;
+      msg.textContent = 'Voltei ao padrão.';
+    } catch (err) { msg.textContent = erroBonito(err); }
+  };
+
+  // ----- botões -----
+  $e('[data-a="atras"]').onclick = () => { if (!secao('instrucoes').hidden) ir(voltarPara); else fecharCamada(); };
+  $e('[data-a="fechar"]').onclick = fecharCamada;
+  $e('[data-a="mais"]').onclick = pedirIdeias;
+  propria.oninput = () => { $e('[data-a="propria"]').hidden = !propria.value.trim(); };
+  $e('[data-a="propria"]').onclick = () => { const t = propria.value.trim(); if (t) { propria.value = ''; $e('[data-a="propria"]').hidden = true; desenhar({ ajuste: t, cena: t }); } };
+  $e('[data-a="ideias"]').onclick = () => { if (!ocupado) ir('ideias'); };
+  // Fazer outra: com texto em "O que mudar?" a IA refaz a cena com o pedido; sem texto, a mesma ideia com outra semente.
+  $e('[data-a="outra"]').onclick = () => {
+    const mudar = ajuste.value.trim();
+    const ideia = rasc.desenho && rasc.desenho.ideia;
+    if (!mudar && ideia && ideia.cenaEn) desenhar({ ...ideia, refazer: true });
+    else desenhar({ ajuste: mudar, cenaAnterior: ideia ? ideia.cenaEn : '', refazer: true });
+  };
+  $e('[data-a="usar"]').onclick = async () => {
+    if (!rasc.desenho) return;
+    const feito = rasc.desenho;
+    const blob = await reduzir(await base64ParaBlob(feito.imagem), 1600);
+    await guardarImagemDoDia(k, blob, feito.cena || '');
     delete rascunhosIlustra[k];
     await fecharCamada();
     renderJournal(); renderInicio();
     lanche(escolhida ? 'Ilustração guardada como principal. A anterior continua no dia.' : 'Ilustração guardada. Ela vai para o Journal do PC.');
   };
-  el.querySelector('[data-a="galeria"]').onclick = () => escolherFoto('galeria', async (blob) => {
+  $e('[data-a="galeria"]').onclick = () => escolherFoto('galeria', async (blob) => {
     await guardarImagemDoDia(k, blob);
     await fecharCamada();
     renderJournal(); renderInicio();
     lanche(escolhida ? 'Foto guardada como principal. A anterior continua no dia.' : 'Foto guardada como principal do dia.');
   });
+
   abrirCheia(el);
-  if (rascunhosIlustra[k]) mostrar(rascunhosIlustra[k]); else pedir();
+  // Abre SEM desenhar: o desenho só sai depois que o JV toca numa ideia (ou já mostra o último, se voltou).
+  if (rasc.desenho && rasc.estado === 'desenho') { ir('desenho'); mostrar(rasc.desenho); }
+  else {
+    ir('ideias');
+    if (rasc.ideias) desenharIdeias(rasc.ideias); else pedirIdeias();
+  }
 }
 window.abrirIlustracao = abrirIlustracao;
 
@@ -1584,6 +1743,7 @@ function abrirSeuDia() {
 
 function abrirBoletim(data) {
   const k = chaveJv11();
+  boletimAberto = data;
   if (!k) { avisar('Falta a chave do JV11. Toque em "Abrir o boletim" no Telegram.'); return; }
   const mins = jv11Hoje && jv11Hoje.data === data && jv11Hoje.minutos ? `${jv11Hoje.minutos} min` : '';
   const el = h(`<div class="boletim">
@@ -1595,6 +1755,14 @@ function abrirBoletim(data) {
   abrirCheia(el);
 }
 let seuDiaAbertoEm = null;
+let boletimAberto = null;
+// Edições já lidas (qualquer dia), para a aba News marcar o que falta ler.
+const lidosJv11 = () => new Set(lerLS('jj-jv11-lidos', []));
+function marcarLido(data) {
+  const s = lidosJv11(); if (!data || s.has(data)) return;
+  s.add(data); gravarLS('jj-jv11-lidos', [...s].sort().slice(-1000));
+  if (telaAtual === 'news') renderNews();
+}
 window.addEventListener('message', (ev) => {
   if (ev.origin !== JV11_URL || !ev.data || !ev.data.jv11) return;
   if (ev.data.jv11 === 'progresso') {
@@ -1602,13 +1770,67 @@ window.addEventListener('message', (ev) => {
     if (!barra) return;
     const v = Math.min(1, Math.max(0, Number(ev.data.v) || 0));
     barra.style.setProperty('--v', v);
-    if (v >= 0.92 && lerLS('jj-jv11-lido', null) !== hoje()) {
+    if (v >= 0.92) marcarLido(boletimAberto);
+    if (v >= 0.92 && boletimAberto === hoje() && lerLS('jj-jv11-lido', null) !== hoje()) {
       gravarLS('jj-jv11-lido', hoje());
       renderInicio();
       if (seuDiaAbertoEm !== hoje()) { seuDiaAbertoEm = hoje(); setTimeout(abrirSeuDia, 500); } // terminou de ler: sobe "Seu dia"
     }
   } else if (ev.data.jv11 === 'seudia') abrirSeuDia();
 });
+
+// ================= ABA NEWS: todas as edições do JV11 =================
+// A lista vem do Worker (/b/lista.json) e fica guardada no aparelho, para abrir rápido e sem internet.
+let edicoesJv11 = lerLS('jj-jv11-edicoes', []);
+let buscandoEdicoes = false;
+async function atualizarEdicoes(forcar) {
+  const k = chaveJv11();
+  if (!k || buscandoEdicoes || DEMO) return;
+  buscandoEdicoes = true;
+  try {
+    const r = await fetch(`${JV11_URL}/b/lista.json?k=${encodeURIComponent(k)}`);
+    if (r.ok) { edicoesJv11 = (await r.json()).edicoes || []; gravarLS('jj-jv11-edicoes', edicoesJv11); if (telaAtual === 'news') renderNews(); }
+    else if (forcar) avisar('Não consegui buscar as edições agora.');
+  } catch (err) { if (forcar) avisar('Sem internet: mostrando as edições guardadas.'); }
+  buscandoEdicoes = false;
+}
+const MESES_NEWS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const SEMANA_NEWS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+const SEMANA_LONGA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+function renderNews() {
+  const lista = $('news-lista'); lista.innerHTML = '';
+  if (!chaveJv11()) { $('news-resumo').textContent = ''; lista.appendChild(vazio('Toque uma vez em "Abrir o boletim" no Telegram para ligar o JV11 a este aparelho.')); return; }
+  const eds = edicoesJv11;
+  if (!eds.length) { $('news-resumo').textContent = ''; lista.appendChild(vazio('Buscando as edições...')); return; }
+  const lidos = lidosJv11();
+  if (lerLS('jj-jv11-lido', null)) lidos.add(lerLS('jj-jv11-lido', null));
+  const faltam = eds.filter((x) => !lidos.has(x.data)).length;
+  $('news-resumo').textContent = `${eds.length} ${eds.length === 1 ? 'edição guardada' : 'edições guardadas'}${faltam ? ` · ${faltam} sem ler` : ' · todas lidas'}`;
+  const dt = (d) => new Date(d + 'T12:00:00');
+  const [prim, ...resto] = eds;
+  const p = dt(prim.data);
+  const ehHoje = prim.data === hoje();
+  const destaque = h(`<button class="news-destaque">
+    <div class="news-dia-grande"><b>${p.getDate()}</b><span>${ehHoje ? 'Hoje' : SEMANA_LONGA[p.getDay()]}<br>${MESES_NEWS[p.getMonth()]} de ${p.getFullYear()}</span></div>
+    <p class="news-manchete">${e(prim.manchete || 'Edição do JV11')}</p>
+    <span class="botao menta">${lidos.has(prim.data) ? 'Reler' : 'Ler'}${prim.minutos ? ` em ${prim.minutos} min` : ''}</span></button>`);
+  destaque.onclick = () => abrirBoletim(prim.data);
+  lista.appendChild(destaque);
+  let mesAtual = '';
+  resto.forEach((x, i) => {
+    const d = dt(x.data);
+    const mes = `${MESES_NEWS[d.getMonth()]} de ${d.getFullYear()}`;
+    if (mes !== mesAtual) { mesAtual = mes; lista.appendChild(h(`<h2 class="news-mes">${mes[0].toUpperCase() + mes.slice(1)}</h2>`)); }
+    const lido = lidos.has(x.data);
+    const b = h(`<button class="news-item${lido ? ' lido' : ''}" style="--i:${Math.min(i, 12)}" aria-label="Edição de ${d.getDate()} de ${MESES_NEWS[d.getMonth()]}${lido ? ', lida' : ''}">
+      <span class="news-data"><b>${d.getDate()}</b><small>${SEMANA_NEWS[d.getDay()]}</small></span>
+      <span class="news-txt"><p>${e(x.manchete || 'Edição do JV11')}</p>${x.minutos ? `<small>${x.minutos} min de leitura</small>` : ''}</span>
+      <i class="news-ponto"></i></button>`);
+    b.onclick = () => abrirBoletim(x.data);
+    lista.appendChild(b);
+  });
+}
+$('news-recarregar').onclick = () => atualizarEdicoes(true);
 
 // Cartão "JV11 de hoje" no Início: aparece quando o boletim de hoje existe; depois de lido, vira uma linha discreta.
 function renderJv11Inicio() {
@@ -2162,6 +2384,7 @@ window.aoMostrarTela = (tela) => {
   if (tela === 'tarefas') { renderTarefas(); sincTarefas(); }
   if (tela === 'journal') { renderJournal(); window.JJ_PC?.renderPortal?.(); }
   if (tela === 'ajustes') window.JJ_PC?.renderAjustes?.();
+  if (tela === 'news') { renderNews(); atualizarEdicoes(); }
   if (tela === 'habitos') mostrarPainelHab(painelHab);
 };
 let painelHab = 'hoje';
@@ -2257,6 +2480,8 @@ import('./journal-pc.js').then((m) => m.iniciar({ ESPACOS, itensJournal, fotosJo
 // ================= ESPELHO CIFRADO DOS DADOS (Etapa 2, Fase 4c) =================
 // Segundo canal, em paralelo ao backup do GitHub: dias, notas, memórias, contadores, hábitos e plano também vão (cifrados) pela nuvem
 // e voltam do PC. Só roda com a chave dos dados aberta; sem ela nada muda. Junta com o mesmo juntar.js do GitHub (idempotente).
+// Áudio original das entrevistas (audio.js): sobe cifrado em segundo plano e toca com o texto andando junto.
+import('./audio.js').then((m) => { window.JJAudio = m; if (!DEMO) m.iniciarSubida({ buscarLigacao }); }).catch((err) => console.warn('áudio das entrevistas indisponível:', err));
 import('./espelho.js').then((m) => m.iniciar({
   demo: DEMO, nuvem, buscarLigacao,
   lerDados: () => dados,

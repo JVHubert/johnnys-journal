@@ -117,6 +117,41 @@
     return { texto: junto, mudou: junto !== String(texto) };
   }
 
+  // ---------- texto sem acento (caso Buenos Aires, 14/11): o Whisper turbo às vezes devolve partes sem acento e sem pontuação ----------
+
+  const SOLTAS = new Set(['l', 'n', 'tr', 'voc', 'ent', 's']);   // pedaços que sobram quando o "á", "ã", "ê", "é" somem
+  const contaAcentos = (t) => (String(t).match(/[áàâãéêíóôõúüç]/gi) || []).length;
+  const contaSoltas = (t) => String(t).toLowerCase().split(/[^a-záàâãéêíóôõúüç]+/).filter((p) => SOLTAS.has(p)).length;
+  /** Texto de português que veio sem as letras acentuadas: quase sem acento em texto longo, ou cheio de palavras soltas ("l", "tr", "voc"). */
+  function pareceSemAcento(texto) {
+    const t = String(texto || '');
+    const letras = (t.match(/[a-záàâãéêíóôõúüç]/gi) || []).length;
+    if (letras >= 250 && contaAcentos(t) / letras < 0.005) return true;
+    return t.length >= 100 && contaSoltas(t) >= 4;
+  }
+  const notaTexto = (t) => { const l = (String(t).match(/[a-záàâãéêíóôõúüç]/gi) || []).length || 1; return (contaAcentos(t) - contaSoltas(t) * 3) / l; };
+
+  /**
+   * Uma parte pelo Whisper do Groq. pedir(modelo) devolve o JSON da resposta (verbose_json: { text, segments }).
+   * Se o texto vier sem acento, refaz a MESMA parte com o modelo completo e fica com o melhor.
+   * Devolve { texto, segmentos: [{ start, end, text }], modelo, refeito }.
+   */
+  async function transcreverGroq(pedir) {
+    const ler = (j) => ({
+      texto: String((j && j.text) || '').trim(),
+      segmentos: ((j && j.segments) || []).map((s) => ({ start: Number(s.start) || 0, end: Number(s.end) || 0, text: String(s.text || '').trim() })).filter((s) => s.text),
+    });
+    let r = { ...ler(await pedir('whisper-large-v3-turbo')), modelo: 'whisper-large-v3-turbo', refeito: false };
+    if (pareceSemAcento(r.texto)) {
+      try {
+        const r2 = { ...ler(await pedir('whisper-large-v3')), modelo: 'whisper-large-v3', refeito: true };
+        if (r2.texto && (!pareceSemAcento(r2.texto) || notaTexto(r2.texto) > notaTexto(r.texto))) r = r2;
+        else r.refeito = true;
+      } catch (err) { /* o modelo completo falhou (limite, rede): fica o primeiro */ }
+    }
+    return r;
+  }
+
   /** Junta as partes na ordem do tempo, com as marcas de microfone mudo. */
   function montarTexto(partes, mudos) {
     const itens = [
@@ -179,24 +214,58 @@
     try { am = await decodificar(blob); } catch (err) { am = null; }
     if (!am) {
       aoProgresso('enviando', 1, 1);
-      return { texto: limparRepeticoes(await enviar(blob, nomeDoAudio(blob))).texto, mudos: [], partes: 1, semMedida: true };
+      const r = limparParte(0, await enviar(blob, nomeDoAudio(blob)));
+      return { texto: r.texto, mudos: [], partes: 1, semMedida: true, segmentos: montarSegmentos([r], []) };
     }
     const duracao = am.length / TAXA;
     const niveis = medirNiveis(am);
     const mudos = trechosMudos(niveis);
     if (!sempreFatiar && !mudos.length && duracao <= FATIA_MAX && blob.size <= FATIA_BYTES) {
       aoProgresso('enviando', 1, 1);
-      return { texto: limparRepeticoes(await enviar(blob, nomeDoAudio(blob))).texto, mudos, partes: 1, duracao };
+      const r = limparParte(0, await enviar(blob, nomeDoAudio(blob)));
+      return { texto: r.texto, mudos, partes: 1, duracao, amostras: am, segmentos: montarSegmentos([r], [], duracao) };
     }
     const partes = trechosDeFala(duracao, mudos, niveis);
     for (let i = 0; i < partes.length; i++) {
       aoProgresso('enviando', i + 1, partes.length);
       const p = partes[i];
       const fatia = am.subarray(Math.floor(p.ini * TAXA), Math.floor(p.fim * TAXA));
-      const t = await enviar(new Blob([wavDe(fatia)], { type: 'audio/wav' }), 'trecho.wav');
-      p.texto = limparRepeticoes(t || '').texto;
+      Object.assign(p, limparParte(p.ini, await enviar(new Blob([wavDe(fatia)], { type: 'audio/wav' }), 'trecho.wav')));
     }
-    return { texto: montarTexto(partes, mudos), mudos: mudos.filter((m) => m.fim - m.ini >= MARCA_MIN), partes: partes.length, duracao };
+    return { texto: montarTexto(partes, mudos), mudos: mudos.filter((m) => m.fim - m.ini >= MARCA_MIN), partes: partes.length, duracao, amostras: am, segmentos: montarSegmentos(partes, mudos, duracao) };
+  }
+
+  /** A resposta de quem transcreve é texto puro ou { texto, segmentos: [{ start, end, text }] } (tempos da própria parte). */
+  function limparParte(ini, resposta) {
+    const bruto = typeof resposta === 'string' || resposta == null ? { texto: resposta || '', segmentos: [] } : resposta;
+    const lim = limparRepeticoes(bruto.texto || '');
+    // Se a limpeza mexeu no texto, os segmentos já não batem com ele: vira um segmento só, na parte inteira.
+    let segs = (bruto.segmentos || []).filter((s) => s && s.text);
+    if (lim.mudou) {
+      const fim = segs.length ? Math.max(...segs.map((s) => s.end)) : 0;
+      segs = lim.texto.trim() ? [{ start: 0, end: fim, text: lim.texto.trim() }] : [];
+    }
+    return { ini, texto: lim.texto, segmentos: segs };
+  }
+
+  /**
+   * Segmentos para ouvir com o texto: [[ini, fim, 'texto'], ...] em segundos do áudio inteiro.
+   * Cada parte soma o seu início aos tempos que o Whisper deu; as partes mudas (20 s ou mais) entram como marca.
+   * Parte sem segmentos (a resposta veio só em texto) vira um segmento só, do início dela até o início da próxima.
+   */
+  function montarSegmentos(partes, mudos, duracao) {
+    const r1 = (x) => Math.round(x * 100) / 100;
+    const itens = [];
+    partes.forEach((p, i) => {
+      const segs = p.segmentos || [];
+      if (segs.length) for (const s of segs) itens.push([r1(p.ini + s.start), r1(p.ini + Math.max(s.end, s.start)), s.text]);
+      else if ((p.texto || '').trim()) {
+        const prox = partes[i + 1] ? partes[i + 1].ini : (duracao != null ? duracao : p.ini);
+        itens.push([r1(p.ini), r1(Math.max(prox, p.ini)), p.texto.trim()]);
+      }
+    });
+    for (const m of mudos.filter((x) => x.fim - x.ini >= MARCA_MIN)) itens.push([r1(m.ini), r1(m.fim), marcaMudo(m.ini, m.fim)]);
+    return itens.sort((a, b) => a[0] - b[0]);
   }
 
   // ---------- guardar no celular ----------
@@ -413,7 +482,7 @@
 
   raiz.JJG = {
     // contas
-    medirNiveis, trechosMudos, trechosDeFala, limparRepeticoes, montarTexto, wavDe, mmss, marcaMudo,
+    medirNiveis, trechosMudos, trechosDeFala, limparRepeticoes, montarTexto, montarSegmentos, pareceSemAcento, transcreverGroq, wavDe, mmss, marcaMudo,
     // transcrever e guardar
     transcreverAudio, listar, audioDe, apagar, arrumarAoAbrir, gravar,
     marcar: (id, estado) => mudarMeta(id, { estado }),

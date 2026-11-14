@@ -143,7 +143,7 @@ export function completarResumos(aoProgresso = null) {
   if (completando) return completando
   completando = (async () => {
     let metas = await listarMetas()
-    const faltam = metas.filter((m) => m.lugar === undefined || m.imagens === undefined)
+    const faltam = metas.filter((m) => m.lugar === undefined || m.imagens === undefined || m.pai === undefined)
     if (!faltam.length) return metas
     const PEDACO = 150
     for (let i = 0; i < faltam.length; i += PEDACO) {
@@ -151,7 +151,7 @@ export function completarResumos(aoProgresso = null) {
       await transacao(['conteudo'], 'readonly', async (t) => {
         for (const m of faltam.slice(i, i + PEDACO)) {
           const c = await pedido(t.objectStore('conteudo').get(m.id))
-          novas.push({ ...m, etiquetas: m.etiquetas || c?.pg?.etiquetas || [], lugar: m.lugar === undefined ? (c?.pg?.lugar || null) : m.lugar, imagens: hashesDoPg(c?.pg) })
+          novas.push({ ...m, etiquetas: m.etiquetas || c?.pg?.etiquetas || [], lugar: m.lugar === undefined ? (c?.pg?.lugar || null) : m.lugar, imagens: hashesDoPg(c?.pg), pai: c?.pg?.pai || null, pasta: typeof c?.pg?.pasta === 'string' ? c.pg.pasta : null })
         }
       })
       await gravarLote({ metas: novas })

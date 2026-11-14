@@ -22,7 +22,7 @@ const MES_NOME = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'j
 const PESSOAS_E_LUGARES = '@pessoas'
 
 let ui = null // ligações com o novo.js: { ESPACOS, itensJournal, fotosJournal, cartao, atalhoEntrevista, abrirItem, abrirCamada, fecharCamada, abrirFolha, carregarFoto }
-const J = { espaco: 'journal', q: '', todos: false, filtro: 'tudo', sub: 'pessoas', seq: 0, men: null, mostrarSemMencao: false }
+const J = { espaco: 'journal', caminho: [], q: '', todos: false, filtro: 'tudo', sub: 'pessoas', seq: 0, men: null, mostrarSemMencao: false }
 let observador = null
 let calculando = null // a conta das menções em andamento (só uma por vez)
 let adiar = null
@@ -110,7 +110,8 @@ function desenharSeletor(lista, contagens, aberto) {
 function escolher(id) {
   if (id === J.espaco) return
   J.espaco = id
-  if (id !== 'journal' && J.filtro !== 'galeria') J.filtro = 'tudo' // a galeria acompanha a pessoa de um espaço para outro
+  J.caminho = []
+  if (id !== 'journal' && J.filtro !== 'galeria') J.filtro = P.estado().aberto ? 'pastas' : 'tudo' // a galeria acompanha a pessoa de um espaço para outro
   J.todos = false
   render(true)
 }
@@ -170,7 +171,7 @@ function desenharFiltros(aberto) {
   if (!ver) return
   const chips = J.espaco === 'journal'
     ? [['tudo', 'Tudo'], ...(aberto ? [['diario', 'Diário']] : []), ['entrevistas', 'Entrevistas'], ['notas', 'Notas'], ['galeria', 'Galeria']]
-    : [['tudo', 'Tudo'], ['galeria', 'Galeria']]
+    : [...(aberto ? [['pastas', 'Pastas']] : []), ['tudo', 'Por data'], ['galeria', 'Galeria']]
   if (!chips.some(([f]) => f === J.filtro)) J.filtro = 'tudo'
   box.innerHTML = chips.map(([f, nome]) => `<button type="button" data-f="${f}" aria-pressed="${f === J.filtro}">${nome}</button>`).join('')
   box.querySelectorAll('button').forEach((b) => (b.onclick = () => { J.filtro = b.dataset.f; render(false) }))
@@ -441,6 +442,7 @@ async function desenharEspaco(lista, seq, trocou = false) {
     return
   }
   desenharEscopo(lista, '', 0)
+  if (J.filtro === 'pastas' && J.espaco !== 'journal' && U.aberto) { await desenharPastas(lista, cel, seq, trocou); return }
   const itens = [...cel, ...pc].filter((x) => x.esp === J.espaco && filtroOk(x)).sort(ordem)
   const vazio = J.espaco === 'journal'
     ? 'Nada aqui ainda. Faça a entrevista ou toque em + Nota.'
@@ -448,6 +450,110 @@ async function desenharEspaco(lista, seq, trocou = false) {
   const modo = `tl|${J.espaco}|${J.filtro}`
   pintarItens(itens, lista, { meses: true, vazio, chave: `${modo}|${assinaturaDe(itens, lista)}`, reiniciar: trocou || J.ultimoModo !== modo })
   J.ultimoModo = modo
+}
+
+// ---------------------------------------------------------------- pastas (como no PC)
+// Duas origens, iguais às do PC: página dentro de página (campo "pai") e o caminho de pasta que veio do Notion
+// (campo "pasta", "Faculdade/3º período/Cálculo"). O toque numa pasta entra nela; o caminho no topo volta.
+const porNome = (a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR', { numeric: true, sensitivity: 'base' })
+function arvoreDoEspaco(metas) {
+  const raiz = { id: '', nome: '', filhos: [], pagina: null }
+  const nos = new Map()
+  const porId = new Map(metas.map((m) => [m.id, m])); const ids = porId
+  const noDaPagina = (m) => { let n = nos.get(m.id); if (!n) { n = { id: m.id, nome: m.titulo || 'Sem título', filhos: [], pagina: m }; nos.set(m.id, n) } return n }
+  const noDaPasta = (caminho) => {
+    let atual = raiz, acc = ''
+    for (const parte of caminho.split('/').map((x) => x.trim()).filter(Boolean)) {
+      acc += '/' + parte
+      let n = nos.get('pasta:' + acc)
+      if (!n) { n = { id: 'pasta:' + acc, nome: parte, filhos: [], pagina: null }; nos.set(n.id, n); atual.filhos.push(n) }
+      atual = n
+    }
+    return atual
+  }
+  for (const m of metas) {
+    const n = noDaPagina(m)
+    if (m.pai && ids.has(m.pai) && m.pai !== m.id) noDaPagina(porId.get(m.pai)).filhos.push(n)
+    else (m.pasta ? noDaPasta(m.pasta) : raiz).filhos.push(n)
+  }
+  return { raiz, nos }
+}
+const totalDentro = (n) => n.filhos.reduce((s, f) => s + (f.pagina ? 1 : 0) + totalDentro(f), 0)
+const ICONE_PASTA = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2.2h8.5A1.5 1.5 0 0 1 21 9.7v8.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>'
+
+async function desenharPastas(lista, cel, seq, trocou) {
+  const metas = (await A.completarResumos()).filter((m) => !ehTracker(m) && (m.espaco || 'inbox') === J.espaco)
+  if (seq !== J.seq) return
+  LT.desmontar(); G.soltarTudo(); observador?.disconnect()
+  const { raiz, nos } = arvoreDoEspaco(metas)
+  // o caminho guardado pode ter sumido (página apagada ou movida): corta onde quebrou
+  const caminho = []
+  for (const id of J.caminho) { if (!nos.has(id)) break; caminho.push(nos.get(id)) }
+  J.caminho = caminho.map((n) => n.id)
+  const atual = caminho[caminho.length - 1] || raiz
+  const esp = espDe(lista, J.espaco)
+  const mural = $('jor-mural')
+  mural.innerHTML = ''
+  mural.classList.add('jor-novo')
+  mural.classList.remove('lt-mural')
+  const ir = (ids) => { J.caminho = ids; render(false); animarTroca(); window.scrollTo({ top: 0 }) }
+
+  // o caminho: Faculdade › 3º período › Cálculo (cada pedaço volta para lá)
+  if (caminho.length) {
+    const migalhas = h('<nav class="pastas-caminho" aria-label="Onde você está"></nav>')
+    const voltar = h(`<button type="button" class="pastas-voltar" aria-label="Voltar uma pasta">‹</button>`)
+    voltar.onclick = () => ir(J.caminho.slice(0, -1))
+    migalhas.appendChild(voltar)
+    const partes = [{ nome: esp.nome, ids: [] }, ...caminho.map((n, i) => ({ nome: n.nome, ids: J.caminho.slice(0, i + 1) }))]
+    partes.forEach((p, i) => {
+      if (i) migalhas.appendChild(h('<span class="pastas-sep">›</span>'))
+      const ultimo = i === partes.length - 1
+      const b = h(`<button type="button" class="pastas-migalha"${ultimo ? ' aria-current="page"' : ''}>${e(p.nome)}</button>`)
+      if (!ultimo) b.onclick = () => ir(p.ids)
+      migalhas.appendChild(b)
+    })
+    mural.appendChild(migalhas)
+    mural.appendChild(h(`<h2 class="pastas-titulo">${e(atual.nome)}</h2>`))
+  }
+  // dentro de uma página que tem filhas: a própria página vem primeiro
+  if (atual.pagina) {
+    const b = h(`<button type="button" class="pastas-propria"><span>Abrir a página</span><b>${e(atual.nome)}</b></button>`)
+    b.onclick = () => P.abrirPagina(atual.pagina.id)
+    mural.appendChild(b)
+  }
+  const pastas = atual.filhos.filter((n) => n.filhos.length).sort(porNome)
+  const soltas = atual.filhos.filter((n) => !n.filhos.length && n.pagina)
+    .sort((a, b) => String(b.pagina.data || '').localeCompare(String(a.pagina.data || '')) || porNome(a, b))
+  // as notas do celular deste espaço ficam no nível de cima (não têm pasta)
+  const doCelular = caminho.length ? [] : cel.filter((x) => x.esp === J.espaco).sort(ordem)
+  if (!pastas.length && !soltas.length && !doCelular.length && !atual.pagina) { mural.appendChild(h('<p class="vazio jor-vazio">Este espaço está vazio.</p>')); return }
+  if (!caminho.length && !pastas.length) mural.appendChild(h('<p class="meta pastas-dica">Nada aqui está organizado em pastas. As páginas aparecem soltas.</p>'))
+  if (pastas.length) {
+    const box = h('<div class="pastas-lista"></div>')
+    pastas.forEach((n, i) => {
+      const tot = totalDentro(n)
+      const b = h(`<button type="button" class="pasta-linha" style="--i:${Math.min(i, 14)};--cor:${e(esp.cor || '#968073')}">
+        <span class="pasta-icone">${ICONE_PASTA}</span>
+        <span class="pasta-nome"><b>${e(n.nome)}</b><small>${num(tot)} ${tot === 1 ? 'nota' : 'notas'}${n.pagina ? ' · é uma página' : ''}</small></span>
+        <span class="pasta-seta" aria-hidden="true">›</span></button>`)
+      b.onclick = () => ir([...J.caminho, n.id])
+      box.appendChild(b)
+    })
+    mural.appendChild(box)
+  }
+  const itens = [...doCelular, ...soltas.map((n) => ({ k: 'p', m: n.pagina, esp: J.espaco, data: n.pagina.data || chaveDeMs(n.pagina.quando), t: n.pagina.quando || 0 }))]
+  if (itens.length) {
+    if (pastas.length) mural.appendChild(h(`<h3 class="pastas-sub">${caminho.length ? 'Notas' : 'Notas soltas'}</h3>`))
+    const el = h('<div class="mural-secao"><div class="mural-col"></div><div class="mural-col"></div></div>')
+    const alt = [0, 0]
+    for (const x of itens.slice(0, 400)) {
+      const c = x.k === 'c' ? cartaoCelular(x, esp.cor) : cartaoPagina(x, lista)
+      const col = alt[0] <= alt[1] ? 0 : 1
+      el.children[col].appendChild(c); alt[col] += alturaDoItem(x)
+    }
+    mural.appendChild(el)
+  }
+  if (trocou) animarTroca()
 }
 
 // ---------------------------------------------------------------- Pessoas e lugares

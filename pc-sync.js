@@ -66,7 +66,7 @@ export function metaDe(id, pg, mudou, extra = {}) {
       id, titulo, espaco: pg.espaco || null, data: pg.data || null, quando: dataParaMs(pg.data) || pg.criada || pg.atualizada || 0,
       criada: pg.criada || 0, atualizada: pg.atualizada || 0, mudou, previa: semTitulo.slice(0, 160),
       etiquetas: Array.isArray(pg.etiquetas) ? pg.etiquetas : [], lugar: pg.lugar || null, imagens: A.hashesDoPg(pg),
-      origem: typeof pg.origem === 'string' ? pg.origem : pg.origem?.tipo || null, ...extra,
+      origem: typeof pg.origem === 'string' ? pg.origem : pg.origem?.tipo || null, pai: pg.pai || null, pasta: typeof pg.pasta === 'string' ? pg.pasta : null, ...extra,
     },
     conteudo: { id, pg }, texto: { id, texto },
   }

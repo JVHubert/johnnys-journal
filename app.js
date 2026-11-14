@@ -343,6 +343,7 @@ function guardarResposta() {
 
 function persistirEnt() {
   const copia = { modo: ent.modo, titulo: ent.titulo, data: ent.data, respostas: [...ent.respostas], t: Date.now() };
+  if (ent.audios && ent.audios.length) copia.audios = ent.audios;   // recibos do áudio original (audio.js)
   if (ent.modo === 'dia') {
     const r = dia(ent.data);
     r.entrevista = copia;
@@ -535,19 +536,22 @@ async function comecarGravacao() {
 }
 
 // Manda um pedaço de áudio para o Whisper do Groq e devolve o texto.
+// Devolve { texto, segmentos } (com o tempo de cada frase). Se o texto vier sem acento, refaz com o modelo completo (gravacao.js).
 async function groqTexto(audio, nome) {
-  const form = new FormData();
-  form.append('file', audio, nome);
-  form.append('model', 'whisper-large-v3-turbo');
-  form.append('language', 'pt');
-  form.append('response_format', 'json');
-  form.append('temperature', '0');
-  form.append('prompt', GROQ_CONTEXTO);
-  const r = await fetch(GROQ_URL, { method: 'POST', headers: { Authorization: `Bearer ${chaveGroq()}` }, body: form });
-  if (r.status === 401) throw new Error('chave');
-  if (r.status === 429) throw new Error('limite');
-  if (!r.ok) throw new Error('falha');
-  return ((await r.json()).text || '').trim();
+  return JJG.transcreverGroq(async (modelo) => {
+    const form = new FormData();
+    form.append('file', audio, nome);
+    form.append('model', modelo);
+    form.append('language', 'pt');
+    form.append('response_format', 'verbose_json');
+    form.append('temperature', '0');
+    form.append('prompt', GROQ_CONTEXTO);
+    const r = await fetch(GROQ_URL, { method: 'POST', headers: { Authorization: `Bearer ${chaveGroq()}` }, body: form });
+    if (r.status === 401) throw new Error('chave');
+    if (r.status === 429) throw new Error('limite');
+    if (!r.ok) throw new Error('falha');
+    return r.json();
+  });
 }
 
 async function transcrever(audio) {
@@ -570,6 +574,7 @@ async function transcrever(audio) {
     if (!texto) { avisar('Não ouvi nada nessa gravação. Tente de novo, mais perto do celular.'); return; }
     if (res.mudos && res.mudos.length) avisar(res.mudos.length === 1 ? 'O microfone ficou mudo em um trecho. Marquei no texto.' : `O microfone ficou mudo em ${res.mudos.length} trechos. Marquei no texto.`);
     if (gravacaoAtual) { gravacaoAtual.concluir('transcrita'); gravacaoAtual = null; }
+    guardarAudioDaEntrevista(audio, res);
     const area = $('ent-resposta');
     area.value = (area.value.trim() ? area.value.trim() + ' ' : '') + texto;
     ultimoAudio = null;
@@ -585,6 +590,30 @@ async function transcrever(audio) {
     $('ent-gravar-txt').textContent = ultimoAudio ? 'Tentar transcrever de novo' : 'Gravar';
     travarNavegacao(false);
   }
+}
+
+// Guarda o áudio original (Ogg Opus pequeno) com o texto de tempos e sobe cifrado para a nuvem, em segundo plano
+// (audio.js). Falhar aqui nunca atrapalha a transcrição: o texto já está na tela.
+function guardarAudioDaEntrevista(blob, res) {
+  const alvo = ent, passo = ent && ent.passo;
+  if (!alvo || DEMO || !window.JJAudio || !blob) return;
+  window.JJAudio.guardarAudio({ blob, amostras: res.amostras, segmentos: res.segmentos, duracao: res.duracao }).then((rec) => {
+    if (!rec) return;
+    rec.passo = passo;
+    const lista = [...(alvo.audios || [])];
+    if (lista.some((a) => a.chave === rec.chave)) return;   // a mesma gravação transcrita de novo
+    lista.push(rec);
+    alvo.audios = lista;
+    if (ent === alvo) persistirEnt();
+    else {
+      // saiu da entrevista enquanto o áudio era preparado: põe no que já está guardado
+      const guardada = alvo.modo === 'dia' ? lerDia(alvo.data).entrevista : dados.memorias.find((m) => m.titulo === alvo.titulo && m.data === alvo.data);
+      if (!guardada) return;
+      guardada.audios = lista; guardada.t = Date.now();
+      salvar();
+    }
+    window.JJAudio.subirPendentes();
+  }).catch((err) => console.warn('não guardei o áudio original:', err));
 }
 
 $('ent-gravar').onclick = () => {
@@ -1082,7 +1111,7 @@ function irPara(tela) {
   telaAtual = tela;
   pararGravacao();
   document.querySelectorAll('.tela').forEach((s) => (s.hidden = s.id !== 'tela-' + tela));
-  const naBarra = ['inicio', 'tarefas', 'habitos', 'journal'].includes(tela);
+  const naBarra = ['inicio', 'tarefas', 'habitos', 'journal', 'news'].includes(tela);
   if (naBarra) telaDaBarra = tela;
   document.querySelectorAll('.barra button').forEach((b) => {
     if (b.dataset.tela === telaDaBarra) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
