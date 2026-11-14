@@ -1761,7 +1761,7 @@ const lidosJv11 = () => new Set(lerLS('jj-jv11-lidos', []));
 function marcarLido(data) {
   const s = lidosJv11(); if (!data || s.has(data)) return;
   s.add(data); gravarLS('jj-jv11-lidos', [...s].sort().slice(-1000));
-  if (telaAtual === 'news') renderNews();
+  renderNews();
 }
 window.addEventListener('message', (ev) => {
   if (ev.origin !== JV11_URL || !ev.data || !ev.data.jv11) return;
@@ -1789,7 +1789,7 @@ async function atualizarEdicoes(forcar) {
   buscandoEdicoes = true;
   try {
     const r = await fetch(`${JV11_URL}/b/lista.json?k=${encodeURIComponent(k)}`);
-    if (r.ok) { edicoesJv11 = (await r.json()).edicoes || []; gravarLS('jj-jv11-edicoes', edicoesJv11); if (telaAtual === 'news') renderNews(); }
+    if (r.ok) { edicoesJv11 = (await r.json()).edicoes || []; gravarLS('jj-jv11-edicoes', edicoesJv11); renderNews(); }
     else if (forcar) avisar('Não consegui buscar as edições agora.');
   } catch (err) { if (forcar) avisar('Sem internet: mostrando as edições guardadas.'); }
   buscandoEdicoes = false;
@@ -1797,11 +1797,13 @@ async function atualizarEdicoes(forcar) {
 const MESES_NEWS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 const SEMANA_NEWS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const SEMANA_LONGA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+// Desenha na caixa que a aba Journal cria quando o espaço "News" está escolhido (sem a caixa, não faz nada).
 function renderNews() {
-  const lista = $('news-lista'); lista.innerHTML = '';
-  if (!chaveJv11()) { $('news-resumo').textContent = ''; lista.appendChild(vazio('Toque uma vez em "Abrir o boletim" no Telegram para ligar o JV11 a este aparelho.')); return; }
+  const lista = (document.querySelector('#jor-mural .news-caixa')); if (!lista) return;
+  lista.innerHTML = '<p class="meta news-resumo" id="news-resumo"></p>';
+  if (!chaveJv11()) { lista.appendChild(vazio('Toque uma vez em "Abrir o boletim" no Telegram para ligar o JV11 a este aparelho.')); return; }
   const eds = edicoesJv11;
-  if (!eds.length) { $('news-resumo').textContent = ''; lista.appendChild(vazio('Buscando as edições...')); return; }
+  if (!eds.length) { lista.appendChild(vazio('Buscando as edições...')); return; }
   const lidos = lidosJv11();
   if (lerLS('jj-jv11-lido', null)) lidos.add(lerLS('jj-jv11-lido', null));
   const faltam = eds.filter((x) => !lidos.has(x.data)).length;
@@ -1830,7 +1832,7 @@ function renderNews() {
     lista.appendChild(b);
   });
 }
-$('news-recarregar').onclick = () => atualizarEdicoes(true);
+const temNews = () => !!chaveJv11();
 
 // Cartão "JV11 de hoje" no Início: aparece quando o boletim de hoje existe; depois de lido, vira uma linha discreta.
 function renderJv11Inicio() {
@@ -2384,7 +2386,6 @@ window.aoMostrarTela = (tela) => {
   if (tela === 'tarefas') { renderTarefas(); sincTarefas(); }
   if (tela === 'journal') { renderJournal(); window.JJ_PC?.renderPortal?.(); }
   if (tela === 'ajustes') window.JJ_PC?.renderAjustes?.();
-  if (tela === 'news') { renderNews(); atualizarEdicoes(); }
   if (tela === 'habitos') mostrarPainelHab(painelHab);
 };
 let painelHab = 'hoje';
@@ -2475,7 +2476,7 @@ setInterval(() => { if (document.visibilityState === 'visible') sincTarefas(); }
 // Seção nova e separada (paginas.js, pc-sync.js, armazem.js): só ela usa o IndexedDB "jj-dados". Se falhar ao carregar, o resto do app segue igual.
 import('./paginas.js').then((m) => m.iniciar({ abrirCamada, fecharCamada, abrirFolha, buscarLigacao, nuvem })).catch((err) => console.warn('páginas do PC indisponíveis:', err));
 // A aba Journal organizada como o PC (espaços, linha do tempo única, Pessoas e lugares). Se não carregar, vale o Journal de antes.
-import('./journal-pc.js').then((m) => m.iniciar({ ESPACOS, itensJournal, fotosJournal, cartao, atalhoEntrevista, abrirItem, abrirCamada, fecharCamada, abrirFolha, carregarFoto, mudouAlgo: () => pintarAniversarios() })).catch((err) => console.warn('Journal por espaços indisponível:', err));
+import('./journal-pc.js').then((m) => m.iniciar({ ESPACOS, itensJournal, fotosJournal, cartao, atalhoEntrevista, abrirItem, abrirCamada, fecharCamada, abrirFolha, carregarFoto, temNews, desenharNews: () => { renderNews(); atualizarEdicoes(); }, mudouAlgo: () => pintarAniversarios() })).catch((err) => console.warn('Journal por espaços indisponível:', err));
 
 // ================= ESPELHO CIFRADO DOS DADOS (Etapa 2, Fase 4c) =================
 // Segundo canal, em paralelo ao backup do GitHub: dias, notas, memórias, contadores, hábitos e plano também vão (cifrados) pela nuvem

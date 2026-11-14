@@ -20,6 +20,7 @@ const num = P.num
 const MES3 = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 const MES_NOME = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 const PESSOAS_E_LUGARES = '@pessoas'
+const NEWS = '@news'
 
 let ui = null // ligações com o novo.js: { ESPACOS, itensJournal, fotosJournal, cartao, atalhoEntrevista, abrirItem, abrirCamada, fecharCamada, abrirFolha, carregarFoto }
 const J = { espaco: 'journal', caminho: [], q: '', todos: false, filtro: 'tudo', sub: 'pessoas', seq: 0, men: null, mostrarSemMencao: false }
@@ -79,7 +80,7 @@ const espDe = (lista, id) => lista.find((x) => x.id === id) || P.ESPACO_INBOX
 // ---------------------------------------------------------------- pedaços de tela
 function desenharSeletor(lista, contagens, aberto) {
   const sel = $('jor-espacos')
-  const abas = [...lista.map((x) => ({ id: x.id, nome: x.nome, cor: x.cor, n: contagens[x.id] || 0 })), ...(aberto ? [{ id: PESSOAS_E_LUGARES, nome: 'Pessoas e lugares', pessoas: true }] : [])]
+  const abas = [...lista.map((x) => ({ id: x.id, nome: x.nome, cor: x.cor, n: contagens[x.id] || 0 })), ...(ui.temNews?.() ? [{ id: NEWS, nome: 'News', news: true }] : []), ...(aberto ? [{ id: PESSOAS_E_LUGARES, nome: 'Pessoas e lugares', pessoas: true }] : [])]
   const sig = abas.map((a) => `${a.id}:${a.n ?? ''}:${a.nome}:${a.cor || ''}`).join('|')
   sel.classList.add('jor-sel')
   sel.setAttribute('role', 'tablist')
@@ -88,7 +89,9 @@ function desenharSeletor(lista, contagens, aberto) {
     assinaturaSeletor = sig
     sel.innerHTML = ''
     for (const a of abas) {
-      const b = h(`<button type="button" role="tab" data-e="${e(a.id)}" style="--cor:${e(a.cor || 'var(--menta)')}">${a.pessoas
+      const b = h(`<button type="button" role="tab" data-e="${e(a.id)}" style="--cor:${e(a.cor || 'var(--menta)')}">${a.news
+        ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h12v14H6a2 2 0 0 1-2-2z"/><path d="M16 9h4v8a2 2 0 0 1-4 0"/><path d="M7.5 9h5M7.5 12.5h5M7.5 16h3"/></svg>'
+        : a.pessoas
         ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.2c2.4 0 3.9 1.4 4.5 4"/></svg>'
         : `<i class="dot"></i>`}<span>${e(a.nome)}</span>${a.n ? `<small>${num(a.n)}</small>` : ''}</button>`)
       b.onclick = () => escolher(a.id)
@@ -166,7 +169,7 @@ function desenharStatus() {
 
 function desenharFiltros(aberto) {
   const box = $('jor-filtros')
-  const ver = J.espaco !== PESSOAS_E_LUGARES
+  const ver = J.espaco !== PESSOAS_E_LUGARES && J.espaco !== NEWS
   box.hidden = !ver
   if (!ver) return
   const chips = J.espaco === 'journal'
@@ -738,11 +741,12 @@ export async function render(trocou = false) {
   const contagens = {}
   for (const x of lista) contagens[x.id] = (celPorEsp[x.id] || 0) + (U.aberto ? U.contagem?.porEspaco?.[x.id] || 0 : 0)
   if (J.espaco === PESSOAS_E_LUGARES && !U.aberto) J.espaco = 'journal'
-  if (J.espaco !== PESSOAS_E_LUGARES && !lista.some((x) => x.id === J.espaco)) J.espaco = 'journal'
+  if (J.espaco === NEWS && !ui.temNews?.()) J.espaco = 'journal'
+  if (J.espaco !== PESSOAS_E_LUGARES && J.espaco !== NEWS && !lista.some((x) => x.id === J.espaco)) J.espaco = 'journal'
   desenharSeletor(lista, contagens, U.aberto)
   desenharStatus()
   const busca = $('jor-busca')
-  busca.hidden = false
+  busca.hidden = J.espaco === NEWS
   busca.classList.add('jor-busca')
   busca.placeholder = J.espaco === PESSOAS_E_LUGARES ? 'Procurar uma pessoa ou lugar' : `Procurar em ${J.todos && J.q ? 'todos os espaços' : espDe(lista, J.espaco).nome}`
   if (document.activeElement !== busca) busca.value = J.q
@@ -753,6 +757,16 @@ export async function render(trocou = false) {
   ent.hidden = J.espaco !== 'journal'
   if (J.espaco === 'journal') ui.atalhoEntrevista()
   if (trocou) animarTroca()
+  const nova = $('jor-nova')
+  if (nova) nova.style.display = J.espaco === NEWS ? 'none' : ''
+  if (J.espaco === NEWS) {
+    LT.desmontar(); G.soltarTudo(); observador?.disconnect(); desenharEscopo(lista, '', 0)
+    const mural = $('jor-mural')
+    mural.classList.remove('lt-mural')
+    mural.innerHTML = '<div class="news-caixa"></div>'
+    ui.desenharNews()
+    return
+  }
   if (emPessoas) { LT.desmontar(); G.soltarTudo(); desenharEscopo(lista, '', 0); await desenharPessoas(seq) } else await desenharEspaco(lista, seq, trocou)
   void pendente
 }

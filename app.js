@@ -1111,7 +1111,7 @@ function irPara(tela) {
   telaAtual = tela;
   pararGravacao();
   document.querySelectorAll('.tela').forEach((s) => (s.hidden = s.id !== 'tela-' + tela));
-  const naBarra = ['inicio', 'tarefas', 'habitos', 'journal', 'news'].includes(tela);
+  const naBarra = ['inicio', 'tarefas', 'habitos', 'journal'].includes(tela);
   if (naBarra) telaDaBarra = tela;
   document.querySelectorAll('.barra button').forEach((b) => {
     if (b.dataset.tela === telaDaBarra) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');

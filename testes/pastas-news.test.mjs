@@ -55,8 +55,9 @@ try {
   await page.goto(URL_APP); await page.waitForTimeout(1500)
 
   // ---- aba News ----
-  ok(await page.isVisible('.barra button[data-tela="news"]'), 'a barra tem o botão News')
-  await page.click('.barra button[data-tela="news"]'); await page.waitForSelector('.news-destaque')
+  ok((await page.$$('.barra button')).length === 4, 'a barra continua com 4 botões')
+  await page.click('.barra button[data-tela="journal"]'); await page.waitForSelector('#jor-espacos [data-e="@news"]')
+  await page.click('#jor-espacos [data-e="@news"]'); await page.waitForSelector('.news-destaque')
   await page.waitForTimeout(800)
   ok((await page.$$('.news-item')).length === 29, 'News: a edição mais nova em destaque + as outras 29 em lista')
   ok(/30 edições guardadas · 29 sem ler/.test(await page.textContent('#news-resumo')), 'resumo conta as guardadas e as sem ler: ' + await page.textContent('#news-resumo'))
@@ -70,11 +71,13 @@ try {
   await page.goBack(); await page.waitForTimeout(500)
 
   // ---- pastas ----
-  await page.click('.barra button[data-tela="journal"]'); await page.waitForSelector('#jor-espacos [role="tab"]')
+  await page.click('#jor-espacos [data-e="journal"]'); await page.waitForTimeout(600)
   await page.click('#jor-pc [data-a="abrir"]'); await page.waitForSelector('#pc-senha')
   await page.fill('#pc-senha', SENHA); await page.click('#pc-enviar')
   await page.waitForFunction((m) => { const s = window.JJ_PC?.estado(); return s && !s.sinc.rodando && s.contagem && s.contagem.paginas >= m }, naoTracker.length, { timeout: 180_000 })
   await page.waitForTimeout(800)
+  const abas = await page.$$eval('#jor-espacos [role="tab"]', (xs) => xs.map((x) => x.dataset.e))
+  ok(abas.slice(-2).join() === '@news,@pessoas', 'News fica logo antes de Pessoas e lugares: ' + abas.join(', '))
   for (const esp of ['faculdade', 'cursos', 'notas']) {
     await page.click(`#jor-espacos [data-e="${esp}"]`); await page.waitForTimeout(1200)
     const chips = await page.$$eval('#jor-filtros button', (xs) => xs.map((x) => x.textContent))
