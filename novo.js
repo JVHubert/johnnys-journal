@@ -1783,15 +1783,16 @@ window.addEventListener('message', (ev) => {
 // A lista vem do Worker (/b/lista.json) e fica guardada no aparelho, para abrir rápido e sem internet.
 let edicoesJv11 = lerLS('jj-jv11-edicoes', []);
 let buscandoEdicoes = false;
+let falhaEdicoes = '';
 async function atualizarEdicoes(forcar) {
   const k = chaveJv11();
   if (!k || buscandoEdicoes || DEMO) return;
   buscandoEdicoes = true;
   try {
     const r = await fetch(`${JV11_URL}/b/lista.json?k=${encodeURIComponent(k)}`);
-    if (r.ok) { edicoesJv11 = (await r.json()).edicoes || []; gravarLS('jj-jv11-edicoes', edicoesJv11); renderNews(); }
-    else if (forcar) avisar('Não consegui buscar as edições agora.');
-  } catch (err) { if (forcar) avisar('Sem internet: mostrando as edições guardadas.'); }
+    if (r.ok) { falhaEdicoes = ''; edicoesJv11 = (await r.json()).edicoes || []; if (!edicoesJv11.length) falhaEdicoes = 'Nenhuma edição guardada ainda.'; gravarLS('jj-jv11-edicoes', edicoesJv11); renderNews(); }
+    else { falhaEdicoes = 'O JV11 não respondeu agora. Tente de novo em instantes.'; renderNews(); }
+  } catch (err) { falhaEdicoes = 'Sem internet agora. As edições aparecem quando a conexão voltar.'; renderNews(); }
   buscandoEdicoes = false;
 }
 const MESES_NEWS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
@@ -1803,7 +1804,7 @@ function renderNews() {
   lista.innerHTML = '<p class="meta news-resumo" id="news-resumo"></p>';
   if (!chaveJv11()) { lista.appendChild(vazio('Toque uma vez em "Abrir o boletim" no Telegram para ligar o JV11 a este aparelho.')); return; }
   const eds = edicoesJv11;
-  if (!eds.length) { lista.appendChild(vazio('Buscando as edições...')); return; }
+  if (!eds.length) { lista.appendChild(vazio(falhaEdicoes || 'Buscando as edições...')); return; }
   const lidos = lidosJv11();
   if (lerLS('jj-jv11-lido', null)) lidos.add(lerLS('jj-jv11-lido', null));
   const faltam = eds.filter((x) => !lidos.has(x.data)).length;
