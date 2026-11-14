@@ -340,7 +340,10 @@ async function desenharPessoas(seq) {
   const aniv = new Map(proximosAniversarios(pes, hoje, 30).map((a) => [a.pessoa.id, a]))
   const q = norm(J.q.trim())
   const passa = (nome) => !q || norm(nome).includes(q)
+  // Pessoas na ordem do próximo aniversário (pedido do JV, 14/11): hoje primeiro; sem data de nascimento, no fim.
+  const faltam = new Map(proximosAniversarios(pes, hoje, 366).map((a) => [a.pessoa.id, a.dias]))
   const todasPessoas = men.indice.pessoas.filter((x) => passa(x.nome))
+    .sort((a, b) => (faltam.get(a.id) ?? 999) - (faltam.get(b.id) ?? 999) || String(a.nome).localeCompare(String(b.nome), 'pt-BR'))
   const lugares = men.indice.lugares.filter((x) => passa(x.nome))
   const semMencao = men.pessoas.filter((p) => !men.indice.pessoas.some((x) => x.id === p.id) && passa(p.nome))
   const top = men.indice.pessoas.reduce((m, x) => (x.dias.length > (m?.dias.length || 0) ? x : m), null)
