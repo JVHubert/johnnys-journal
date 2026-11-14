@@ -1152,3 +1152,7 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 @keyframes aud-entra { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .aud-texto { animation: none; } .aud-seg, .aud-play { transition: none; } }
 @media print { .na-audio { display: none; } }
+
+.na-juntar { margin: 8px 0 0; }
+.na-juntar .link { color: var(--sec); font-size: 14px; padding: 0; }
+.na-juntar .meta { margin: 4px 0 0; }

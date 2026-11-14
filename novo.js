@@ -1028,7 +1028,7 @@ function abrirItem(it) {
       <p class="na-tipo"><i style="background:${esp.cor}"></i>${NOME_TIPO[it.tipo]} · ${e(esp.nome)}</p>
       <h1>${e(it.titulo || 'Sem título')}</h1>
       <p class="na-data">${e(quando)}${hora ? ' · ' + hora : ''}</p>
-      ${audiosDoItem.length ? '<div class="na-audio"></div>' : ''}
+      ${audiosDoItem.length ? '<div class="na-audio"></div>' : (entrAudio && !entrAudio.apagada && window.JJAudio && chaveGroq() ? '<div class="na-juntar"><button class="link" data-a="juntar">Juntar a gravação</button><p class="meta" role="status" hidden></p><input type="file" accept="audio/*,video/mp4" hidden></div>' : '')}
       <div class="na-texto">${corpo}</div>
     </div>
     <div class="na-pe">
@@ -1100,6 +1100,39 @@ function abrirItem(it) {
     };
     abrirFolha(menu);
   };
+  // Memória ou entrevista que já existia sem áudio: junta um arquivo de áudio do celular. O texto NÃO muda; a transcrição
+  // só serve para saber o tempo de cada frase.
+  const juntarB = el.querySelector('[data-a="juntar"]');
+  if (juntarB) {
+    const arq = el.querySelector('.na-juntar input'), msg = el.querySelector('.na-juntar .meta');
+    juntarB.onclick = () => arq.click();
+    arq.onchange = async () => {
+      const f = arq.files[0]; arq.value = '';
+      if (!f) return;
+      juntarB.hidden = true; msg.hidden = false; msg.textContent = 'Conferindo o som…';
+      try {
+        const res = await JJG.transcreverAudio(f, groqTexto, {
+          sempreFatiar: true,
+          aoProgresso: (fase, i, n) => { msg.textContent = fase === 'medindo' ? 'Conferindo o som…' : n > 1 ? `Transcrevendo parte ${i} de ${n}…` : 'Transcrevendo…'; },
+        });
+        msg.textContent = 'Guardando o áudio…';
+        const rec = await window.JJAudio.guardarAudio({ blob: f, amostras: res.amostras, segmentos: res.segmentos, duracao: res.duracao });
+        if (!rec) throw new Error('não consegui guardar o áudio');
+        const alvo = it.memoria || lerDia(it.dia).entrevista;
+        alvo.audios = [...(alvo.audios || []), rec]; alvo.t = Date.now();
+        salvar();
+        window.JJAudio.subirPendentes();
+        await fecharCamada();
+        renderJournal();
+        const novo = itensJournal().find((x) => x.id === it.id);
+        if (novo) abrirItem(novo);
+        lanche('Gravação juntada. O texto continua o mesmo.');
+      } catch (err) {
+        juntarB.hidden = false;
+        msg.textContent = err.message === 'limite' ? 'Passou do limite gratuito por agora. Tente em alguns minutos.' : err.message === 'chave' ? 'O Groq recusou a chave.' : 'Não consegui juntar a gravação (' + err.message + ').';
+      }
+    };
+  }
   let player = null;
   const alvoAudio = el.querySelector('.na-audio');
   if (alvoAudio) {
