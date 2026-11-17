@@ -791,8 +791,10 @@ function renderCartaoEntrevista(reg) {
   $('ent-hoje-status').textContent = n ? `feita · ${n} de ${ENTREVISTAS.dia.length} temas` : 'ainda não';
   $('ent-hoje-btn').innerHTML = n ? 'Rever ou completar a entrevista' : `${ICONE_MIC_18}Fazer a entrevista`;
   $('ent-hoje-btn').className = n ? 'botao contorno grande' : 'botao violeta grande';
+  $('ent-hoje-apagar').hidden = !n;
   if (window.aoMudarEntrevista) window.aoMudarEntrevista();
 }
+$('ent-hoje-apagar').onclick = () => { if (window.apagarEntrevistaDoDia) window.apagarEntrevistaDoDia(atual); };
 // Hoje antes das 4h: pergunta se a entrevista é de ontem (novo.js, escolherDiaDaEntrevista).
 $('ent-hoje-btn').onclick = () => {
   const abrir = () => { irPara('entrevista'); iniciarEnt('dia'); };

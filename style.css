@@ -1201,3 +1201,8 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 @keyframes tde-respira { 50% { transform: scale(.6); opacity: .5; } }
 @media (prefers-reduced-motion: reduce) { .tde *, .tde::before { animation: none !important; transition: none !important; } }
 .tde-pensando > .link { align-self: center; }
+
+/* Apagar entrevista/memória/nota à vista (2.94.0): lixeira coral no topo e botão no fim do texto */
+.na-lixo { color: var(--coral); }
+.na-apagar { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 28px 0 8px; min-height: 48px; border-radius: 14px; background: transparent; font-weight: 600; }
+.ent-apagar { color: var(--coral); display: block; margin: 6px auto 0; }

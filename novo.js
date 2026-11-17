@@ -1093,13 +1093,15 @@ function abrirItem(it) {
   // Áudio original da entrevista/memória (audio.js): barra "Ouvir a gravação" com o texto de tempos andando junto.
   const entrAudio = it.memoria || (it.dia ? lerDia(it.dia).entrevista : null);
   const audiosDoItem = window.JJAudio && entrAudio ? window.JJAudio.audiosDe(entrAudio) : [];
-  const ehEntDia = it.tipo === 'entrevista' && !!it.dia && !it.memoria;
+  // dia só com tweet (entrevista vazia) também se apaga: era o caso em que o JV não achava o botão
+  const ehEntDia = (it.tipo === 'entrevista' || it.tipo === 'tweet') && !!it.dia && !it.memoria;
   const outras = it.dia ? (lerDia(it.dia).imagens || []) : [];
+  const rotuloApagar = ehEntDia ? 'Apagar esta entrevista' : it.memoria ? 'Apagar esta memória' : 'Apagar esta nota';
   const el = h(`<article class="nota-aberta">
     <div class="na-barra">
       <button class="icone-b" data-a="voltar" aria-label="Voltar">‹</button><span></span>
       <button class="icone-b apagado" data-a="editar" aria-label="Editar">✎</button>
-      ${ehNota || ehEntDia || it.memoria ? '<button class="icone-b apagado" data-a="mais" aria-label="Mais opções">⋯</button>' : ''}
+      ${ehNota || ehEntDia || it.memoria ? `<button class="icone-b na-lixo" data-a="apagar-item" aria-label="${rotuloApagar}"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button><button class="icone-b" data-a="mais" aria-label="Mais opções">⋯</button>` : ''}
     </div>
     ${it.foto ? '<div class="na-foto"><img alt=""></div>' : ''}
     ${outras.length ? `<div class="na-outras faixa-rola" aria-label="Outras imagens do dia">${outras.map((x, i) => `<button class="na-mini" data-i="${i}" aria-label="Imagem ${i + 2}"><img alt=""></button>`).join('')}</div>` : ''}
@@ -1109,6 +1111,7 @@ function abrirItem(it) {
       <p class="na-data">${e(quando)}${hora ? ' · ' + hora : ''}</p>
       ${audiosDoItem.length ? '<div class="na-audio"></div>' : (entrAudio && !entrAudio.apagada && window.JJAudio && chaveGroq() ? '<div class="na-juntar"><button class="link" data-a="juntar">Juntar a gravação</button><p class="meta" role="status" hidden></p><input type="file" accept="audio/*,video/mp4" hidden></div>' : '')}
       <div class="na-texto">${corpo}</div>
+      ${ehNota || ehEntDia || it.memoria ? `<button class="botao contorno-coral na-apagar" data-a="apagar-item"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg> ${rotuloApagar}</button>` : ''}
     </div>
     <div class="na-pe">
       <span>Edição longa no PC</span>
@@ -1157,6 +1160,13 @@ function abrirItem(it) {
       abrirFolha(menu);
     };
   });
+  // Apagar direto (lixeira no topo e botão no fim do texto), sem passar pelo ⋯: o JV não achava. O lanche oferece Desfazer.
+  el.querySelectorAll('[data-a="apagar-item"]').forEach((bt) => (bt.onclick = async () => {
+    await fecharCamada();
+    if (ehEntDia) apagarEntrevistaDoDia(it.dia);
+    else if (it.memoria) apagarMemoria(it.memoria);
+    else { const n = it.nota; mexerNota(n.id, (x) => { x.apagada = true; }); lanche('Nota apagada', () => mexerNota(n.id, (x) => { x.apagada = false; })); }
+  }));
   const maisB = el.querySelector('[data-a="mais"]');
   if (maisB && ehEntDia) maisB.onclick = () => {
     const menu = h('<div class="menu-folha"><button data-a="mudar-dia">Mudar o dia desta entrevista</button><button class="coral" data-a="apagar">Apagar entrevista</button></div>');
@@ -1556,6 +1566,7 @@ function apagarEntrevistaDoDia(k) {
     salvar(); renderTudo();
   });
 }
+window.apagarEntrevistaDoDia = apagarEntrevistaDoDia;
 function apagarMemoria(m) {
   const antes = [...(m.respostas || [])];
   Object.assign(m, { respostas: [], apagada: true, t: Date.now() });
