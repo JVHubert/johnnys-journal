@@ -55,10 +55,11 @@ const PONTE_FALSA = () => {
     localStorage.setItem('jj-github-token', 'github_pat_TESTE');
     localStorage.setItem('jj-groq-chave', 'gsk_TESTE');
     localStorage.setItem('jj-nuvem', JSON.stringify({ url: 'https://nuvem-falsa.invalid', segredo: 'seg-teste' }));
-    localStorage.setItem('jj-trava', JSON.stringify({ id: 'webauthn-antigo' }));
     localStorage.setItem('jj-teste-mudanca', 'á é í ó ú ç — ' + 'x'.repeat(200000));
   });
   await a.goto(URL_APP);
+  // a trava antiga entra só depois de abrir: se estivesse lá ao abrir, o Windows pediria a chave de segurança de verdade
+  await a.evaluate(() => localStorage.setItem('jj-trava', JSON.stringify({ id: 'webauthn-antigo' })));
   await a.waitForFunction(() => window.JJ_MUDANCA && typeof abrirAjustes === 'function' || !!document.getElementById('aj-mudanca'));
   await a.evaluate(() => { document.documentElement.classList.remove('trancado'); });
   await a.evaluate(() => { history.pushState({ tela: 'ajustes' }, ''); irPara('ajustes'); });
