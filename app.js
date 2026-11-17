@@ -512,6 +512,7 @@ function medidorDeSom(fluxo, onda, aviso) {
 window.medidorDeSom = medidorDeSom;
 let pararMedidor = () => {};
 
+let marcosDaGravacao = null;   // promessa dos marcos [{foto, seg}] das fotos abertas durante a gravação
 async function comecarGravacao() {
   let fluxo;
   try { fluxo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
@@ -521,14 +522,19 @@ async function comecarGravacao() {
   const g = JJG.gravar(fluxo, { mimeType: tipo, origem: ent && ent.modo === 'memoria' ? 'Memória: ' + ent.titulo : 'Entrevista', avisoEm: $('ent-mudo') });
   gravacaoAtual = g;
   gravador = g.rec;
+  let inicioG = Date.now();
   gravador.onstop = () => {
     pararMedidor();
     fluxo.getTracks().forEach((t) => t.stop());
     clearInterval(relogio);
     ultimoAudio = g.blob();
+    // fotos da galeria (app nativo): a revisão abre por cima enquanto transcreve; os marcos vão com o áudio
+    marcosDaGravacao = window.fotosNaGravacao ? window.fotosNaGravacao.terminar((Date.now() - inicioG) / 1000) : null;
     transcrever(ultimoAudio);
   };
   g.comecar();
+  inicioG = Date.now();
+  if (window.fotosNaGravacao) window.fotosNaGravacao.comecar(ent, () => (Date.now() - inicioG) / 1000);
   pararMedidor = medidorDeSom(fluxo, $('ent-onda'), $('ent-mudo'));
   travarNavegacao(true);
   const inicio = Date.now();
@@ -598,6 +604,7 @@ async function transcrever(audio) {
 // (audio.js). Falhar aqui nunca atrapalha a transcrição: o texto já está na tela.
 function guardarAudioDaEntrevista(blob, res) {
   const alvo = ent, passo = ent && ent.passo;
+  const marcosProntos = marcosDaGravacao; marcosDaGravacao = null;
   if (!alvo || DEMO || !window.JJAudio || !blob) return;
   window.JJAudio.guardarAudio({ blob, amostras: res.amostras, segmentos: res.segmentos, duracao: res.duracao }).then((rec) => {
     if (!rec) return;
@@ -615,6 +622,13 @@ function guardarAudioDaEntrevista(blob, res) {
       salvar();
     }
     window.JJAudio.subirPendentes();
+    // fotos abertas durante a fala: ficam presas no segundo do áudio (a miniatura aparece no player da nota)
+    if (marcosProntos) marcosProntos.then((m) => {
+      if (!m || !m.length) return;
+      rec.marcos = m;
+      if (ent === alvo) persistirEnt();
+      else salvar();
+    }).catch(() => {});
   }).catch((err) => console.warn('não guardei o áudio original:', err));
 }
 
@@ -644,6 +658,9 @@ $('ent-memoria-ir').onclick = () => {
   if (!t) { avisar('Dê um nome para a memória.'); return; }
   const ja = dados.memorias.find((m) => m.titulo === t);
   ent = ja ? { ...ja, passo: 0 } : { modo: 'memoria', titulo: t, data: hoje(), passo: 0, respostas: [] };
+  // início e fim (opcionais): servem para mostrar as fotos daquele período durante a gravação (app nativo)
+  const ini = $('memoria-inicio').value, fim = $('memoria-fim').value;
+  if (ini) { ent.inicio = ini; ent.fim = fim && fim >= ini ? fim : ini; }
   mostrarEnt('ent-passo'); renderPasso();
 };
 $('ent-voltar').onclick = () => { guardarResposta(); ent.passo--; renderPasso(); };

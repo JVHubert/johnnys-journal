@@ -1239,6 +1239,7 @@ function abrirItem(it) {
       ui: { buscarLigacao },
       rotulo: (a, i) => (a.passo != null && temasA[a.passo] ? temasA[a.passo].tema : 'Gravação ' + (i + 1)),
       reduzirMovimento: matchMedia('(prefers-reduced-motion: reduce)').matches,
+      foto: carregarFoto,
     });
   }
   abrirCheia(el, () => { if (player) player.parar(); });
@@ -1525,6 +1526,69 @@ async function carregarFoto(caminho, img) {
     img.closest('.carregando')?.classList.remove('carregando');
   } catch (err) { /* fica sem a foto */ }
 }
+
+// ================= FOTOS DA GALERIA NA ENTREVISTA (2.98.0, app nativo casca 6) =================
+// Entrevista do dia: as fotos do dia da entrevista (o dia de onde ela foi aberta). Memória: do início ao fim dela.
+// As escolhidas para a nota viram imagens do dia (dia da foto, na memória) e marcam o segundo do áudio em que foram abertas.
+async function adicionarImagemAoDia(k, blob) {
+  const caminho = `fotos/galeria-${k}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}.jpg`;
+  await guardarNoCelular(caminho, blob);
+  const r = dia(k);
+  const item = { foto: caminho, fotoPendente: true, t: Date.now() };
+  if (!(r.ilustracao && r.ilustracao.foto)) r.ilustracao = item;
+  else r.imagens = [...(r.imagens || []), item];
+  return caminho;
+}
+let fotosAtivas = null;
+async function fotosComecar(alvo, seg) {
+  fotosAtivas = null;
+  if (!window.JJFotos || !JJFotos.disponivel() || !alvo || lerLS('jj-fotos-na-gravacao', true) === false) return;
+  const memoria = alvo.modo === 'memoria';
+  const ini = memoria ? (alvo.inicio || '') : alvo.data;
+  const fim = memoria ? (alvo.fim || ini) : alvo.data;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ini || '')) return;   // memória sem início: sem fotos
+  const { de, ate } = JJFotos.periodo(ini, fim);
+  const fotos = await JJFotos.listar(de, ate);
+  if (!fotos || !fotos.length) return;
+  const rotulo = memoria ? `de ${alvo.titulo}` : alvo.data === hoje() ? 'de hoje' : `de ${alvo.data.slice(8)}/${alvo.data.slice(5, 7)}`;
+  fotosAtivas = { alvo, ctl: JJFotos.comecar({ fotos, rotulo, seg, viagem: ini !== fim }) };
+}
+// Fim da gravação: revisão, cópia das fotos da nota, lixo apagado com uma confirmação. Devolve os marcos [{foto, seg}].
+async function fotosTerminar(duracao) {
+  if (!fotosAtivas) return [];
+  const { ctl, alvo } = fotosAtivas; fotosAtivas = null;
+  const r = ctl.terminar();
+  if (!r.nota.length && !r.lixo.length && !r.marcos.length) return [];
+  const dec = await JJFotos.revisar({ ...r, duracao });
+  const porId = new Map(r.fotos.map((f) => [f.id, f]));
+  const caminhos = new Map();
+  for (const id of dec.nota) {
+    try {
+      const b = await (await fetch(JJFotos.foto(id))).blob();
+      const f = porId.get(id);
+      const k = alvo.modo === 'memoria' && f ? chave(new Date(f.quando)) : alvo.data;
+      caminhos.set(id, await adicionarImagemAoDia(k, b));
+    } catch (err) { /* essa foto fica de fora */ }
+  }
+  if (caminhos.size) { salvar(); enviarFotosPendentes(); }
+  let msg = caminhos.size ? `${caminhos.size} ${caminhos.size === 1 ? 'foto foi' : 'fotos foram'} para a nota.` : '';
+  if (dec.lixo.length) {
+    const apagou = dec.apagar ? await JJFotos.apagar(dec.lixo) : { ok: false };
+    if (apagou.ok) msg += ` ${dec.lixo.length} apagada${dec.lixo.length === 1 ? '' : 's'} da galeria.`;
+    else {
+      // recusou (ou "Salvar sem apagar"): a lista fica guardada para revisar depois
+      const pend = lerLS('jj-lixo-pendente', []);
+      gravarLS('jj-lixo-pendente', [...new Set([...pend, ...dec.lixo])]);
+      msg += ` A lista de lixo ficou guardada (${dec.lixo.length}).`;
+    }
+  }
+  if (msg.trim()) avisar(msg.trim());
+  return r.marcos.filter((m) => caminhos.has(m.id)).map((m) => ({ foto: caminhos.get(m.id), seg: m.seg }));
+}
+window.fotosNaGravacao = {
+  comecar: (alvo, seg) => { fotosComecar(alvo, seg).catch((err) => console.warn('fotos:', err)); },
+  terminar: (duracao) => fotosTerminar(duracao).catch((err) => { console.warn('fotos:', err); return []; }),
+};
 
 // ================= ILUSTRAÇÃO DO DIA =================
 // Ao fim da entrevista (e pelo botão "Criar ilustração" do dia), o serviço do Journal lê a entrevista,
@@ -2799,6 +2863,7 @@ import('./journal-pc.js').then((m) => m.iniciar({ ESPACOS, itensJournal, fotosJo
 // Segundo canal, em paralelo ao backup do GitHub: dias, notas, memórias, contadores, hábitos e plano também vão (cifrados) pela nuvem
 // e voltam do PC. Só roda com a chave dos dados aberta; sem ela nada muda. Junta com o mesmo juntar.js do GitHub (idempotente).
 // Áudio original das entrevistas (audio.js): sobe cifrado em segundo plano e toca com o texto andando junto.
+import('./fotos-entrevista.js').catch((err) => console.warn('fotos da entrevista indisponíveis:', err));
 import('./audio.js').then((m) => { window.JJAudio = m; if (!DEMO) m.iniciarSubida({ buscarLigacao }); }).catch((err) => console.warn('áudio das entrevistas indisponível:', err));
 import('./espelho.js').then((m) => m.iniciar({
   demo: DEMO, nuvem, buscarLigacao,

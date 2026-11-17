@@ -193,9 +193,11 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
  * Monta o player dentro de `alvo` (um elemento). `audios` = lista de recibos. `rotulo(a, i)` dá o nome de cada um quando há vários.
  * Devolve { parar() } (pausa e solta o áudio ao fechar a tela).
  */
-export function montarPlayer(alvo, audios, { ui, rotulo = (a, i) => `Gravação ${i + 1}`, reduzirMovimento = false } = {}) {
+export function montarPlayer(alvo, audios, { ui, rotulo = (a, i) => `Gravação ${i + 1}`, reduzirMovimento = false, foto = null } = {}) {
   let atual = 0, url = null, segs = [], ativo = -1, rolouNaMao = 0, preparando = false, velocidade = 1;
   alvo.innerHTML = `<section class="aud" aria-label="Gravação original">
+    <figure class="aud-destaque" hidden><img alt=""><figcaption></figcaption></figure>
+    <div class="aud-marcos" hidden aria-label="Fotos citadas na gravação"></div>
     <div class="aud-barra">
       <button type="button" class="aud-play" data-a="play" aria-label="Ouvir a gravação"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="aud-i-play" d="M8 5.5v13l11-6.5z"/><path class="aud-i-pausa" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></button>
       <div class="aud-meio">
@@ -216,8 +218,45 @@ export function montarPlayer(alvo, audios, { ui, rotulo = (a, i) => `Gravação 
   const dur = () => (isFinite(audio.duration) && audio.duration > 0 ? audio.duration : (audios[atual].duracao || 0));
   const dizer = (t) => { estado.textContent = t || ''; estado.hidden = !t; };
 
+  // ----- fotos abertas durante a fala (marcos): miniaturas presas no segundo do áudio, como os comentários do SoundCloud -----
+  const marcosBox = $a('.aud-marcos'), destaque = $a('.aud-destaque');
+  let marcos = [], marcoAtivo = -2;
+  const montarMarcos = () => {
+    marcos = (audios[atual].marcos || []).filter((m) => m && m.foto && m.seg >= 0).sort((a, b) => a.seg - b.seg);
+    marcoAtivo = -2;
+    marcosBox.hidden = destaque.hidden = !(marcos.length && foto);
+    marcosBox.innerHTML = '';
+    if (marcosBox.hidden) return;
+    const d = dur() || Math.max(...marcos.map((m) => m.seg)) + 1;
+    marcos.forEach((m, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'aud-marco'; b.dataset.i = i;
+      b.style.left = Math.min(100, (m.seg / d) * 100) + '%';
+      b.setAttribute('aria-label', `Foto citada em ${tempo(m.seg)}: ouvir daqui`);
+      b.innerHTML = '<img alt="">';
+      foto(m.foto, b.querySelector('img'));
+      b.onclick = async () => { if (!(await preparar())) return; audio.currentTime = m.seg; audio.play().catch(() => {}); };
+      marcosBox.appendChild(b);
+    });
+    pintarMarcos(0);
+  };
+  const pintarMarcos = (t) => {
+    if (!marcos.length || !foto) return;
+    let i = -1;
+    for (let k = 0; k < marcos.length; k++) if (marcos[k].seg <= t + 0.2) i = k;
+    if (i === marcoAtivo) return;
+    marcoAtivo = i;
+    marcosBox.querySelectorAll('.aud-marco').forEach((b) => b.classList.toggle('agora', Number(b.dataset.i) === i));
+    // antes do primeiro marco, o destaque mostra a primeira foto
+    const m = marcos[Math.max(0, i)];
+    foto(m.foto, destaque.querySelector('img'));
+    destaque.querySelector('figcaption').textContent = i >= 0 ? `citada em ${tempo(m.seg)}` : `${marcos.length} ${marcos.length === 1 ? 'foto citada' : 'fotos citadas'} na fala`;
+    destaque.classList.remove('troca'); void destaque.offsetWidth; destaque.classList.add('troca');
+  };
+
   const pintarTempo = () => {
     const d = dur(), t = audio.currentTime || 0;
+    pintarMarcos(t);
     $a('.aud-agora').textContent = tempo(t); $a('.aud-total').textContent = tempo(d);
     if (!arrastando) prog.value = d ? Math.round((t / d) * 1000) : 0;
     prog.style.setProperty('--p', (d ? (t / d) * 100 : 0) + '%');
@@ -313,9 +352,12 @@ export function montarPlayer(alvo, audios, { ui, rotulo = (a, i) => `Gravação 
       audio.removeAttribute('src'); atual = i;
       escolha.querySelectorAll('.aud-chip').forEach((x) => x.setAttribute('aria-pressed', String(Number(x.dataset.i) === i)));
       texto.innerHTML = ''; if (!texto.hidden) montarTexto();
+      montarMarcos();
       pintarTempo(); dizer('');
     };
   }
+  montarMarcos();
+  audio.addEventListener('loadedmetadata', () => { if (marcos.length) montarMarcos(); });
   pintarTempo();
   estaNaNuvem(audios[0]).then((n) => { if (n === false) dizer('Esta gravação ainda não foi para a nuvem (só você a ouve aqui, por enquanto).'); }).catch(() => {});
   return {
