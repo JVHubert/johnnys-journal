@@ -8,6 +8,13 @@ import { estacaoAtual, faseDaLua, NOME_ESTACAO } from './astro.js';
 // ---------- pequenos ajudantes ----------
 const lerLS = (k, padrao = null) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? padrao; } catch (e) { return padrao; } };
 const gravarLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* segue */ } };
+// ---------- app nativo (casca 3+): a ponte JJNativo do Android ----------
+// Fora do app (Chrome, Firefox, testes) NATIVO é null e tudo segue como antes.
+const NATIVO = window.JJNativo || null;
+const pedidosNativos = new Map();
+let seqNativo = 0;
+window.__jjNativo = (id, ok, msg) => { const f = pedidosNativos.get(id); if (f) { pedidosNativos.delete(id); f({ ok, msg }); } };
+const nativo = (metodo, ...args) => new Promise((ok) => { const id = 'n' + (++seqNativo); pedidosNativos.set(id, ok); NATIVO[metodo](id, ...args); });
 const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 const e = (s) => esc(String(s ?? ''));
 const novoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -2205,6 +2212,105 @@ const chave2 = (rotulo, ligado, aoMudar, extra = '') => {
 };
 let ajustesAvisos = null;
 
+// ================= MUDANÇA PARA O APP NOVO (casca 3) =================
+// O app novo não enxerga o que o Chrome guardou. No app antigo, "Preparar a mudança" baixa um arquivo com tudo o que
+// está neste celular (hábitos, entrevistas, tarefas, token do backup, chave do Groq, preferências), cifrado com um
+// código de 6 números que aparece na tela. No app novo, a primeira tela pede o arquivo e o código.
+// Ficam de fora: a trava (a digital é cadastrada de novo) e a chave das páginas do PC (pede a senha dos dados de novo).
+const MUDANCA_FORA = new Set(['jj-trava', 'jj-casca', 'jj-atualizou']);
+const MUDANCA_VOLTAS = 150000;
+async function chaveDaMudanca(codigo, sal) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(codigo), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: sal, iterations: MUDANCA_VOLTAS, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+const bytesParaB64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+const b64ParaBytes = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
+async function montarMudanca(codigo) {
+  const tudo = {};
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && !MUDANCA_FORA.has(k)) tudo[k] = localStorage.getItem(k); }
+  const sal = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const cifrado = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await chaveDaMudanca(codigo, sal), new TextEncoder().encode(JSON.stringify(tudo))));
+  return { journalMudanca: 1, criada: new Date().toISOString(), chaves: Object.keys(tudo).length, sal: bytesParaB64(sal), iv: bytesParaB64(iv), dados: bytesParaB64(cifrado) };
+}
+async function abrirMudanca(arquivo, codigo) {
+  const pacote = JSON.parse(arquivo);
+  if (pacote.journalMudanca !== 1) throw new Error('arquivo');
+  let texto;
+  try { texto = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ParaBytes(pacote.iv) }, await chaveDaMudanca(codigo, b64ParaBytes(pacote.sal)), b64ParaBytes(pacote.dados))); }
+  catch (err) { throw new Error('codigo'); }
+  return JSON.parse(texto);
+}
+window.JJ_MUDANCA = { montarMudanca, abrirMudanca };
+function renderAjMudanca() {
+  const caixa = $('aj-mudanca-box'), box = $('aj-mudanca');
+  if (!caixa || !box) return;
+  // Só no app antigo (Chrome): no app novo a mudança é a tela de boas-vindas.
+  caixa.hidden = !!NATIVO;
+  if (NATIVO) return;
+  box.innerHTML = '';
+  box.appendChild(h(`<div><p>O Journal vai virar um app de verdade. Antes de instalar o novo, prepare a mudança: ela leva tudo o que está neste celular.</p>
+    <button class="botao menta" id="mud-preparar">Preparar a mudança</button><div id="mud-pronta" hidden></div></div>`));
+  box.querySelector('#mud-preparar').onclick = async (ev) => {
+    const b = ev.currentTarget; b.disabled = true; b.textContent = 'Preparando…';
+    try {
+      const codigo = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
+      const pacote = await montarMudanca(codigo);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(pacote)], { type: 'application/json' }));
+      a.download = `journal-mudanca-${hoje()}.json`;
+      a.click();
+      const pronta = box.querySelector('#mud-pronta');
+      pronta.hidden = false;
+      pronta.innerHTML = `<p class="mud-codigo" aria-label="Código da mudança">${codigo.slice(0, 3)} ${codigo.slice(3)}</p>
+        <p class="meta">Anote este código. O arquivo <b>${e(a.download)}</b> foi para Downloads. No app novo, escolha o arquivo e digite o código.</p>`;
+      b.textContent = 'Preparar de novo';
+    } catch (err) { avisar('Não consegui preparar (' + err.message + ').'); b.textContent = 'Preparar a mudança'; }
+    b.disabled = false;
+  };
+}
+// No app novo, sem dados ainda: a tela de boas-vindas traz a mudança.
+function boasVindasDoAppNovo() {
+  if (!NATIVO || DEMO || token() || lerLS('jj-mudanca', null)) return;
+  const el = h(`<div class="mud">
+    <div class="mud-marca" aria-hidden="true">J</div>
+    <h1>O Journal agora é um app</h1>
+    <p class="meta">Traga o que estava no app antigo: hábitos, entrevistas, tarefas, o backup e a chave do Groq.</p>
+    <ol class="mud-passos">
+      <li><b>Escolha o arquivo da mudança</b><span>Ele está em Downloads, com o nome journal-mudanca.</span>
+        <button class="botao contorno" id="mud-arquivo">Escolher o arquivo</button><input type="file" id="mud-input" accept="application/json,.json" hidden><small id="mud-nome"></small></li>
+      <li><b>Digite o código de 6 números</b><span>O que apareceu no app antigo.</span>
+        <input class="campo mud-cod" id="mud-cod" inputmode="numeric" maxlength="7" autocomplete="off" placeholder="000 000"></li>
+    </ol>
+    <p class="mud-erro" role="alert"></p>
+    <button class="botao menta grande" id="mud-trazer" disabled>Trazer meus dados</button>
+    <button class="link" id="mud-zero">Começar do zero</button>
+  </div>`);
+  let arquivo = null;
+  const cod = el.querySelector('#mud-cod'), trazer = el.querySelector('#mud-trazer'), erro = el.querySelector('.mud-erro');
+  const conferir = () => { trazer.disabled = !(arquivo && cod.value.replace(/\D/g, '').length === 6); };
+  el.querySelector('#mud-arquivo').onclick = () => el.querySelector('#mud-input').click();
+  el.querySelector('#mud-input').onchange = async (ev) => {
+    const f = ev.target.files && ev.target.files[0]; if (!f) return;
+    arquivo = await f.text(); el.querySelector('#mud-nome').textContent = f.name; conferir();
+  };
+  cod.oninput = conferir;
+  trazer.onclick = async () => {
+    trazer.disabled = true; trazer.textContent = 'Trazendo…'; erro.textContent = '';
+    try {
+      const tudo = await abrirMudanca(arquivo, cod.value.replace(/\D/g, ''));
+      for (const [k, v] of Object.entries(tudo)) if (!MUDANCA_FORA.has(k)) localStorage.setItem(k, v);
+      gravarLS('jj-mudanca', { quando: Date.now(), chaves: Object.keys(tudo).length });
+      location.reload();
+    } catch (err) {
+      erro.textContent = err.message === 'codigo' ? 'Código errado. Confira os 6 números.' : err.message === 'arquivo' ? 'Esse arquivo não é o da mudança.' : 'Não consegui trazer (' + err.message + ').';
+      trazer.textContent = 'Trazer meus dados'; conferir();
+    }
+  };
+  el.querySelector('#mud-zero').onclick = () => { if (confirm('Começar sem os dados do app antigo? Dá para ligar o backup depois em Ajustes.')) { gravarLS('jj-mudanca', { quando: Date.now(), zero: true }); fecharCamada(); } };
+  abrirCheia(el);
+}
+setTimeout(boasVindasDoAppNovo, 300);
+
 // ================= TRAVA COM A DIGITAL =================
 // Usa a chave de acesso do Android (a mesma que os sites usam para entrar sem senha): o app pede a digital
 // (ou o PIN do celular) ao abrir e ao voltar depois de alguns minutos fora. Os dados continuam no celular
@@ -2216,6 +2322,7 @@ const trava = () => lerLS('jj-trava', null);
 async function pedirDigital() {
   const t = trava();
   if (!t) return true;
+  if (NATIVO) return (await nativo('digital', 'Destravar o Journal')).ok;
   try {
     await navigator.credentials.get({ publicKey: { challenge: bytesAleatorios(32), allowCredentials: [{ type: 'public-key', id: deB64url(t.id) }], userVerification: 'required', timeout: 60000 } });
     return true;
@@ -2242,6 +2349,13 @@ document.addEventListener('visibilitychange', () => {
 // depois do resto do arquivo carregar (o deB64url fica lá embaixo, com os avisos)
 if (document.documentElement.classList.contains('trancado')) setTimeout(destravar, 0);
 async function ligarTrava() {
+  if (NATIVO) {
+    if (!NATIVO.temDigital()) { avisar('Cadastre uma digital ou um PIN nas Configurações do Android primeiro.'); return; }
+    const r = await nativo('digital', 'Ligar a trava do Journal');
+    if (r.ok) { gravarLS('jj-trava', { nativo: true, desde: Date.now() }); avisar('Trava ligada. O Journal vai pedir a digital ao abrir.'); }
+    else avisar('A trava não foi ligada (' + (r.msg || 'cancelado') + ').');
+    return;
+  }
   if (!window.PublicKeyCredential) { avisar('Este navegador não tem a trava com digital.'); return; }
   try {
     const cred = await navigator.credentials.create({ publicKey: {
@@ -2313,9 +2427,11 @@ async function renderAjGravacoes() {
     };
     el.querySelector('[data-a="baixar"]').onclick = async () => {
       const blob = await JJG.audioDe(m.id);
+      const nome = `gravacao-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.${/ogg/.test(m.tipo) ? 'ogg' : 'webm'}`;
+      if (NATIVO) { const r = await nativo('salvar', nome, blob.type || 'audio/ogg', await paraBase64(blob)); avisar(r.ok ? 'Salvo em Downloads: ' + nome : 'Não consegui salvar (' + r.msg + ').'); return; }
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `gravacao-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.${/ogg/.test(m.tipo) ? 'ogg' : 'webm'}`;
+      a.download = nome;
       a.click();
     };
     el.querySelector('[data-a="apagar"]').onclick = async () => {
@@ -2341,6 +2457,8 @@ async function renderAjustes() {
   const av = $('aj-avisos');
   const ligadoAqui = lerLS('jj-avisos', {}).ligado && typeof Notification !== 'undefined' && Notification.permission === 'granted';
   av.innerHTML = '';
+  renderAjMudanca();
+  if (NATIVO) { av.appendChild(h('<p class="meta">Os avisos voltam na próxima atualização do app, mandados pelo próprio celular.</p>')); return; }
   if (!ligacao && !DEMO) { av.appendChild(h('<p class="meta">Ligue o backup primeiro: os avisos vêm do Journal do PC.</p>')); return; }
   const st = h(`<div class="linha-chave"><span>${ligadoAqui ? 'Avisos ligados neste celular' : 'Avisos desligados neste celular'}</span><button class="botao contorno pequeno">${ligadoAqui ? 'Testar' : 'Ligar'}</button></div>`);
   st.querySelector('button').onclick = async () => {

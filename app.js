@@ -134,6 +134,7 @@ function avisar(txt) {
 }
 // abre o menu de compartilhar do Android (WhatsApp, Gmail, Keep...); sem ele, copia
 async function enviar(txt) {
+  if (window.JJNativo) { window.JJNativo.compartilhar(txt); return; }
   if (navigator.share) {
     try { await navigator.share({ title: "Johnny's Journal", text: txt }); return; }
     catch (e) { if (e.name === 'AbortError') return; }

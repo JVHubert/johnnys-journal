@@ -1206,3 +1206,18 @@ body[data-tela="entrevista"] .barra, body[data-tela="entrevista"] .fab { display
 .na-lixo { color: var(--coral); }
 .na-apagar { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 28px 0 8px; min-height: 48px; border-radius: 14px; background: transparent; font-weight: 600; }
 .ent-apagar { color: var(--coral); display: block; margin: 6px auto 0; }
+
+/* ---------- Mudança para o app novo (casca 3) ---------- */
+.mud-codigo { font-size: 44px; font-weight: 800; letter-spacing: .08em; color: var(--menta); font-variant-numeric: tabular-nums; margin: 14px 0 4px; }
+.mud { display: flex; flex-direction: column; gap: 14px; padding: 24px 0 calc(16px + var(--gesto)); min-height: 100%; }
+.mud-marca { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; font-size: 34px; font-weight: 800; background: var(--menta); color: var(--menta-t); animation: tde-entra .6s cubic-bezier(.2, .8, .2, 1) both; }
+.mud h1 { font-size: 30px; }
+.mud-passos { list-style: none; counter-reset: p; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 12px; }
+.mud-passos li { counter-increment: p; position: relative; padding: 14px 16px 16px 56px; background: var(--painel); border: 1px solid var(--borda); border-radius: 16px; display: flex; flex-direction: column; gap: 6px; }
+.mud-passos li::before { content: counter(p); position: absolute; left: 16px; top: 14px; width: 26px; height: 26px; border-radius: 50%; background: var(--elevado); color: var(--menta); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+.mud-passos span, .mud-passos small { color: var(--sec); font-size: 14px; }
+.mud-passos .botao { align-self: flex-start; margin-top: 4px; }
+.mud-cod { font-size: 26px; letter-spacing: .2em; text-align: center; font-variant-numeric: tabular-nums; }
+.mud-erro { color: var(--coral); min-height: 1.2em; margin: 0; }
+.mud #mud-trazer { margin-top: auto; }
+.mud .link { align-self: center; color: var(--sec); }

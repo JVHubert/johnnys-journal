@@ -359,6 +359,8 @@
     // ----- tela acesa -----
     async function pedirTela() {
       if (!vivo || trava || document.visibilityState !== 'visible') return;
+      // No app nativo (casca 3+) o WebView não tem "wake lock": quem segura a tela é o Android.
+      if (window.JJNativo) { window.JJNativo.telaAcesa(true); trava = { release: async () => window.JJNativo.telaAcesa(false), addEventListener() {} }; return; }
       if (!navigator.wakeLock) { if (!buracos.length) alertar('Este navegador não deixa manter a tela acesa. Toque na tela de vez em quando: se ela apagar, o microfone fica mudo.'); return; }
       try {
         trava = await navigator.wakeLock.request('screen');
