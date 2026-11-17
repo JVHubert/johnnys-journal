@@ -171,6 +171,8 @@ async function sincTarefas() {
     T.desde = r.desde; T.quando = Date.now(); T.erro = null; T.fora = fora.size;
     salvarT();
     renderTarefas(); renderInicio();
+    // App nativo: o celular agenda os avisos; tarefa nova ou mudada aqui já entra na lista.
+    if (NATIVO && (enviadas.length || (r.tarefas || []).length)) NATIVO.atualizarAvisos();
   } catch (err) {
     T.erro = err.message;
     renderSinc();
@@ -2310,6 +2312,18 @@ function boasVindasDoAppNovo() {
   abrirCheia(el);
 }
 setTimeout(boasVindasDoAppNovo, 300);
+// Avisos no app nativo (casca 4+): o celular agenda sozinho, com a lista que a nuvem entrega. Liga sozinho na primeira vez
+// (o JV já usava os avisos no app antigo) e, nas outras aberturas, só pede a lista de novo.
+async function ligarAvisosNativos() {
+  const l = await buscarLigacao();
+  if (!l) return { ok: false, msg: 'falta ligar o backup' };
+  return nativo('ligarAvisos', l.url, l.segredo);
+}
+setTimeout(async () => {
+  if (!NATIVO || DEMO || typeof NATIVO.avisosLigados !== 'function') return;
+  if (NATIVO.avisosLigados()) { NATIVO.atualizarAvisos(); return; }
+  if (await buscarLigacao()) ligarAvisosNativos();
+}, 2500);
 
 // ================= TRAVA COM A DIGITAL =================
 // Usa a chave de acesso do Android (a mesma que os sites usam para entrar sem senha): o app pede a digital
@@ -2455,20 +2469,25 @@ async function renderAjustes() {
   $('aj-ligacao').textContent = DEMO ? '' : ligacao ? 'Ligado ao Journal do PC: as tarefas vão e voltam.' : token() ? 'Procurando a ligação com o PC…' : '';
   // avisos (os horários ficam no serviço, que é quem manda)
   const av = $('aj-avisos');
-  const ligadoAqui = lerLS('jj-avisos', {}).ligado && typeof Notification !== 'undefined' && Notification.permission === 'granted';
+  const ligadoAqui = NATIVO ? NATIVO.avisosLigados() : lerLS('jj-avisos', {}).ligado && typeof Notification !== 'undefined' && Notification.permission === 'granted';
   av.innerHTML = '';
   renderAjMudanca();
-  if (NATIVO) { av.appendChild(h('<p class="meta">Os avisos voltam na próxima atualização do app, mandados pelo próprio celular.</p>')); return; }
   if (!ligacao && !DEMO) { av.appendChild(h('<p class="meta">Ligue o backup primeiro: os avisos vêm do Journal do PC.</p>')); return; }
   const st = h(`<div class="linha-chave"><span>${ligadoAqui ? 'Avisos ligados neste celular' : 'Avisos desligados neste celular'}</span><button class="botao contorno pequeno">${ligadoAqui ? 'Testar' : 'Ligar'}</button></div>`);
   st.querySelector('button').onclick = async () => {
+    if (NATIVO) {
+      if (ligadoAqui) { NATIVO.testarAviso(); return; }
+      const r = await ligarAvisosNativos();
+      avisar(r.ok ? 'Avisos ligados neste app.' : 'Não consegui ligar (' + r.msg + ').');
+      renderAjustes(); return;
+    }
     if (!ligadoAqui) { abrirPedidoAvisos(); return; }
     try { let r = await nuvem('/avisos/testar', {}); if (!r.enviados && await renovarInscricao()) r = await nuvem('/avisos/testar', {}); avisar(r.enviados ? 'Aviso de teste enviado.' : 'Nenhum celular inscrito. Toque em Ligar.'); } catch (err) { avisar('Não consegui: ' + err.message); }
   };
   av.appendChild(st);
   try { ajustesAvisos = DEMO ? { manha: '08:00', entrevista: '22:00', manhaLigado: true, entrevistaLigado: true, lembretesLigado: true } : await nuvem('/avisos/ajustes', null, 'GET'); }
   catch (err) { av.appendChild(h('<p class="meta">Sem internet: os horários aparecem quando voltar.</p>')); return; }
-  const mudar = async (campo, valor) => { ajustesAvisos[campo] = valor; if (!DEMO) try { await nuvem('/avisos/ajustes', { [campo]: valor }); } catch (err) { avisar('Não consegui salvar (internet?).'); } };
+  const mudar = async (campo, valor) => { ajustesAvisos[campo] = valor; if (!DEMO) try { await nuvem('/avisos/ajustes', { [campo]: valor }); if (NATIVO) NATIVO.atualizarAvisos(); } catch (err) { avisar('Não consegui salvar (internet?).'); } };
   const hora = (campo) => `<input type="time" class="hora-aviso" data-campo="${campo}" value="${ajustesAvisos[campo]}">`;
   av.appendChild(chave2('Resumo da manhã', ajustesAvisos.manhaLigado, (v) => mudar('manhaLigado', v), hora('manha')));
   av.appendChild(chave2('Lembretes das tarefas', ajustesAvisos.lembretesLigado, (v) => mudar('lembretesLigado', v)));

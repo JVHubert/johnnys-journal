@@ -24,6 +24,10 @@ const PONTE_FALSA = () => {
     telaAcesa: (v) => window.__chamadas.push(['telaAcesa', v]),
     compartilhar: (t) => window.__chamadas.push(['compartilhar', t]),
     abrirFora: (u) => window.__chamadas.push(['abrirFora', u]),
+    avisosLigados: () => !!window.__avisos,
+    ligarAvisos: (id, url, seg) => { window.__chamadas.push(['ligarAvisos', url, seg]); window.__avisos = true; setTimeout(() => window.__jjNativo(id, true, 'ok:3'), 20); },
+    atualizarAvisos: () => window.__chamadas.push(['atualizarAvisos']),
+    testarAviso: () => window.__chamadas.push(['testarAviso']),
     salvar: (id, nome) => { window.__chamadas.push(['salvar', nome]); setTimeout(() => window.__jjNativo(id, true, nome), 20); },
   };
 };
@@ -50,6 +54,7 @@ const PONTE_FALSA = () => {
     sessionStorage.setItem('semeado', '1');
     localStorage.setItem('jj-github-token', 'github_pat_TESTE');
     localStorage.setItem('jj-groq-chave', 'gsk_TESTE');
+    localStorage.setItem('jj-nuvem', JSON.stringify({ url: 'https://nuvem-falsa.invalid', segredo: 'seg-teste' }));
     localStorage.setItem('jj-trava', JSON.stringify({ id: 'webauthn-antigo' }));
     localStorage.setItem('jj-teste-mudanca', 'á é í ó ú ç — ' + 'x'.repeat(200000));
   });
@@ -102,6 +107,11 @@ const PONTE_FALSA = () => {
   assert.ok(depois.mud);
   assert.strictEqual(await b.isVisible('.mud'), false, 'depois da mudança, as boas-vindas não voltam');
 
+  // 2b. Avisos: o app novo liga sozinho com o endereço e a senha da nuvem que vieram na mudança
+  await b.waitForFunction(() => window.__chamadas.some(([f]) => f === 'ligarAvisos'), null, { timeout: 8000 });
+  const lig = (await b.evaluate(() => window.__chamadas)).find(([f]) => f === 'ligarAvisos');
+  assert.deepStrictEqual(lig.slice(1), ['https://nuvem-falsa.invalid', 'seg-teste'], 'liga os avisos com a ligação da nuvem');
+
   // 3. Trava com a digital nativa e compartilhar pela ponte
   await b.evaluate(() => { history.pushState({ tela: 'ajustes' }, ''); irPara('ajustes'); });
   await b.evaluate(() => document.querySelector('#ini-ajustes') && document.querySelector('#ini-ajustes').click());
@@ -114,6 +124,9 @@ const PONTE_FALSA = () => {
   const chamadas = await b.evaluate(() => window.__chamadas);
   assert.ok(chamadas.some(([f]) => f === 'digital'), 'pediu a digital do Android');
   assert.ok(chamadas.some(([f, t]) => f === 'compartilhar' && t === 'texto de teste'), 'compartilhou pela ponte');
+  assert.match(await b.textContent('#aj-avisos'), /Avisos ligados neste celular/, 'Ajustes mostra os avisos ligados');
+  await b.click('#aj-avisos .linha-chave button');
+  assert.ok((await b.evaluate(() => window.__chamadas)).some(([f]) => f === 'testarAviso'), 'Testar manda um aviso pelo app');
   // reabrir com a trava: pede a digital e destrava
   await b.reload();
   await b.waitForFunction(() => !document.documentElement.classList.contains('trancado'), null, { timeout: 8000 });
