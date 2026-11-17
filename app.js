@@ -90,6 +90,7 @@ function salvar() {
   catch (e) { avisar('Não consegui salvar neste navegador.'); }
   agendarSync();
   try { if (window.jjEspelho) window.jjEspelho.agendar(); } catch (e) { /* o espelho nunca atrapalha */ }
+  try { if (window.JJ_WIDGET) window.JJ_WIDGET(); } catch (e) { /* o widget nunca atrapalha */ }
 }
 // dia(k) é chamado antes de toda mudança: o carimbo t decide qual versão vence na sincronização
 const dia = (k) => { const r = (dados.dias[k] = dados.dias[k] || { h: {} }); r.t = Date.now(); return r; };

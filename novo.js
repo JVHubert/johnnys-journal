@@ -2103,6 +2103,7 @@ async function pintarAniversarios() {
 window.JJ_ini = { aniversarios: pintarAniversarios };
 
 function renderInicio() {
+  if (window.JJ_WIDGET) window.JJ_WIDGET();
   if (!$('ini-ano').isConnected) return;
   atualizarAniversarios();
   pintarAniversarios();
@@ -2692,6 +2693,8 @@ function seguirEndereco(hash) {
   if (!hash) return;
   if (hash === '#tarefas-hoje') { vista = 'hoje'; irPara('tarefas'); }
   else if (hash === '#entrevista') abrirEntrevistaDeHoje();
+  // #ditar: microfone do widget (casca 5) — abre direto o ditado de tarefas, que mostra as tarefas para confirmar
+  else if (hash === '#ditar') { vista = 'hoje'; irPara('tarefas'); setTimeout(ditarTarefas, 250); }
   else if (hash.startsWith('#boletim=')) {
     // #boletim=<data>&k=<chave>: vem do botão do Telegram. A chave fica só neste aparelho.
     const p = new URLSearchParams(hash.slice(1));
@@ -2713,6 +2716,32 @@ function seguirEndereco(hash) {
   history.replaceState(null, '', location.pathname + location.search);
 }
 navigator.serviceWorker?.addEventListener('message', (ev) => { if (ev.data && ev.data.abrir) seguirEndereco(ev.data.abrir); });
+window.JJ_SEGUIR = seguirEndereco;
+
+// ---------- widget (casca 5) ----------
+// Garrafas tocadas no widget com o app fechado chegam como "pendentes": valem como se fossem tocadas aqui.
+// Depois de qualquer mudança, o widget recebe a água e as tarefas de hoje.
+function widgetSincronizar() {
+  if (!NATIVO || typeof NATIVO.widgetAgua !== 'function' || DEMO) return;
+  try {
+    const pend = NATIVO.widgetAgua();
+    if (pend) {
+      const w = JSON.parse(pend);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(w.dia || '')) {
+        const r = dia(w.dia);
+        if (r.agua !== w.agua) { r.agua = w.agua; NATIVO.widgetAguaAplicada(); salvar(); if (typeof renderHoje === 'function') renderHoje(); renderInicio(); return; }
+      }
+      NATIVO.widgetAguaAplicada();
+    }
+    const k = hoje();
+    const tarefasHoje = vivas().filter((t) => !t.feita && t.data && t.data <= k).length;
+    NATIVO.atualizarWidget(k, lerDia(k).agua || 0, tarefasHoje);
+  } catch (err) { /* o widget nunca atrapalha */ }
+}
+let widgetT = null;
+window.JJ_WIDGET = () => { clearTimeout(widgetT); widgetT = setTimeout(widgetSincronizar, 300); };
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') window.JJ_WIDGET(); });
+setTimeout(widgetSincronizar, 1200);
 
 // Compartilhar → Journal (Android): o link/texto chega como ?title=&text=&url=. Abre uma folha com duas escolhas:
 // virar tarefa (vai para o PC pela troca de tarefas) ou virar nota do celular.
