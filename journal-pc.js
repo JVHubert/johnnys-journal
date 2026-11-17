@@ -797,6 +797,19 @@ export async function aniversarios() {
   return { lista, mesQueVem }
 }
 
+/** "Neste dia" do Início: páginas do diário do PC (espaço journal, sem as do tracker) com o mesmo dia e mês, de anos anteriores. */
+export async function nesteDia(k) {
+  if (!(await S.estaAberto())) return []
+  const md = k.slice(5), ano = k.slice(0, 4)
+  return (await A.listarMetas())
+    .filter((m) => (m.espaco || 'inbox') === 'journal' && !ehTracker(m))
+    .map((m) => ({ m, data: m.data || chaveDeMs(m.quando) }))
+    .filter((x) => x.data && x.data.slice(5) === md && x.data.slice(0, 4) < ano)
+    .slice(0, 20)
+    .map(({ m, data }) => ({ id: m.id, data, titulo: m.titulo, previa: m.previa || '', abrir: () => P.abrirPagina(m.id),
+      imagem: m.imagens && m.imagens[0] ? () => P.imagemDoPC(m.imagens[0], 'mini') : null }))
+}
+
 export function iniciar(ligacoes) {
   ui = ligacoes
   G.iniciar(ligacoes)
@@ -807,6 +820,6 @@ export function iniciar(ligacoes) {
   $('jor-mural').classList.add('jor-novo')
   P.registrarVista('mencao', vistaMencao)
   P.aoMudar(aoMudarSecao)
-  window.JJ_JOR = { ativo: true, render: () => render(false), aniversarios, estado: () => ({ ...J, men: !!J.men }), medida: null, medidasLinhaDoTempo: LT.medidasDeRolagem, medidasGaleria: G.medidasDaGaleria, irPara: LT.irPara, mencoes, mencaoMs: () => J.men?.ms || null }
+  window.JJ_JOR = { ativo: true, render: () => render(false), aniversarios, nesteDia, estado: () => ({ ...J, men: !!J.men }), medida: null, medidasLinhaDoTempo: LT.medidasDeRolagem, medidasGaleria: G.medidasDaGaleria, irPara: LT.irPara, mencoes, mencaoMs: () => J.men?.ms || null }
   render(false)
 }

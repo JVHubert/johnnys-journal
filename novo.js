@@ -2040,20 +2040,7 @@ function renderInicio() {
   if (prefs.habitos) {
     chipsDeHabitos($('ini-habitos'), renderInicio);
   }
-  // neste dia (anos anteriores)
-  const md = k.slice(5);
-  const antigos = prefs.neste ? itensJournal().filter((it) => it.data && it.data.slice(5) === md && it.data.slice(0, 4) < k.slice(0, 4)) : [];
-  $('ini-neste-box').hidden = !antigos.length;
-  if (antigos.length) {
-    const box = $('ini-neste'); box.innerHTML = '';
-    antigos.forEach((it) => {
-      const anos = Number(k.slice(0, 4)) - Number(it.data.slice(0, 4));
-      const c = h(`<button class="neste">${it.foto ? '<span class="foto"><img alt=""></span>' : ''}<span class="neste-txt"><small class="menta">há ${anos} ${anos === 1 ? 'ano' : 'anos'}</small><b>${e(it.titulo)}</b><span class="trecho">${e(it.texto.slice(0, 140))}</span></span></button>`);
-      if (it.foto) carregarFoto(it.foto, c.querySelector('img'));
-      c.onclick = () => abrirItem(it);
-      box.appendChild(c);
-    });
-  }
+  pintarNeste();
   // entrevista
   const ent = lerDia(k).entrevista;
   const feita = !!(ent && ent.respostas.some(Boolean));
@@ -2061,6 +2048,35 @@ function renderInicio() {
   b.hidden = !prefs.entrevista;
   b.innerHTML = feita ? 'Entrevista feita ✓' : `${mic(18)}Fazer a entrevista de hoje`;
   b.className = feita ? 'botao contorno grande' : 'botao violeta grande';
+}
+// "Neste dia" do Início: a mesma data em anos anteriores. Junta o que nasceu no celular com o diário antigo do PC
+// (páginas do espaço Johnny's Journal, desde 2016), que só aparece com a chave dos dados aberta.
+let pintandoNeste = 0;
+async function pintarNeste() {
+  const box = $('ini-neste-box');
+  if (!box) return;
+  const vez = ++pintandoNeste;
+  const k = hoje(), md = k.slice(5), ano = Number(k.slice(0, 4));
+  if (!prefs.neste) { box.hidden = true; return; }
+  const cel = itensJournal().filter((it) => it.data && it.data.slice(5) === md && Number(it.data.slice(0, 4)) < ano)
+    .map((it) => ({ data: it.data, titulo: it.titulo, texto: it.texto, foto: it.foto, abrir: () => abrirItem(it) }));
+  let pc = [];
+  try { pc = window.JJ_JOR && window.JJ_JOR.nesteDia ? await window.JJ_JOR.nesteDia(k) : []; } catch (err) { pc = []; }
+  if (vez !== pintandoNeste) return;
+  const lista = [...cel, ...pc.map((x) => ({ data: x.data, titulo: x.titulo, texto: x.previa, imagem: x.imagem, abrir: x.abrir }))]
+    .sort((a, b) => b.data.localeCompare(a.data));
+  box.hidden = !lista.length;
+  if (!lista.length) return;
+  const el = $('ini-neste'); el.innerHTML = '';
+  lista.forEach((it) => {
+    const anos = ano - Number(it.data.slice(0, 4));
+    const temFoto = it.foto || it.imagem;
+    const c = h(`<button class="neste">${temFoto ? '<span class="foto"><img alt=""></span>' : ''}<span class="neste-txt"><small class="menta">há ${anos} ${anos === 1 ? 'ano' : 'anos'} · ${it.data.slice(0, 4)}</small><b>${e(it.titulo || 'Sem título')}</b><span class="trecho">${e((it.texto || '').slice(0, 140))}</span></span></button>`);
+    if (it.foto) carregarFoto(it.foto, c.querySelector('img'));
+    else if (it.imagem) it.imagem().then((u) => { if (u) c.querySelector('img').src = u; }).catch(() => {});
+    c.onclick = it.abrir;
+    el.appendChild(c);
+  });
 }
 function pontosCarrossel() {
   const car = $('ini-contadores'), box = $('ini-pontos');
@@ -2521,7 +2537,7 @@ setInterval(() => { if (document.visibilityState === 'visible') sincTarefas(); }
 // Seção nova e separada (paginas.js, pc-sync.js, armazem.js): só ela usa o IndexedDB "jj-dados". Se falhar ao carregar, o resto do app segue igual.
 import('./paginas.js').then((m) => m.iniciar({ abrirCamada, fecharCamada, abrirFolha, buscarLigacao, nuvem })).catch((err) => console.warn('páginas do PC indisponíveis:', err));
 // A aba Journal organizada como o PC (espaços, linha do tempo única, Pessoas e lugares). Se não carregar, vale o Journal de antes.
-import('./journal-pc.js').then((m) => m.iniciar({ ESPACOS, itensJournal, fotosJournal, cartao, atalhoEntrevista, abrirItem, abrirCamada, fecharCamada, abrirFolha, carregarFoto, temNews, desenharNews: () => { renderNews(); atualizarEdicoes(); }, mudouAlgo: () => pintarAniversarios() })).catch((err) => console.warn('Journal por espaços indisponível:', err));
+import('./journal-pc.js').then((m) => m.iniciar({ ESPACOS, itensJournal, fotosJournal, cartao, atalhoEntrevista, abrirItem, abrirCamada, fecharCamada, abrirFolha, carregarFoto, temNews, desenharNews: () => { renderNews(); atualizarEdicoes(); }, mudouAlgo: () => { pintarAniversarios(); pintarNeste(); } })).catch((err) => console.warn('Journal por espaços indisponível:', err));
 
 // ================= ESPELHO CIFRADO DOS DADOS (Etapa 2, Fase 4c) =================
 // Segundo canal, em paralelo ao backup do GitHub: dias, notas, memórias, contadores, hábitos e plano também vão (cifrados) pela nuvem

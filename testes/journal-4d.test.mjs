@@ -304,6 +304,18 @@ try {
   ok(ordemY.aniv >= ordemY.car - 1, 'o cartão fica abaixo dos contadores')
   await page.evaluate(() => window.scrollTo(0, 0))
   await foto(page, '13-inicio-aniversarios-384.png')
+  // "Neste dia" (17/11): com a chave, o Início traz o diário antigo do PC com a mesma data de anos anteriores
+  const diarioHoje = naoTracker.filter(([, p]) => p.espaco === 'journal' && typeof p.data === 'string' && p.data.slice(5, 10) === hoje.slice(5) && p.data.slice(0, 4) < hoje.slice(0, 4))
+  console.log(`  (diário do PC com a data de hoje em anos anteriores: ${diarioHoje.length})`)
+  if (diarioHoje.length) {
+    await page.waitForFunction(() => !document.getElementById('ini-neste-box').hidden, null, { timeout: 15000 }).catch(() => {})
+    const nNeste = await page.$$eval('#ini-neste .neste', (xs) => xs.length)
+    ok(nNeste >= Math.min(diarioHoje.length, 20), `Neste dia: ${nNeste} cartões (diário do PC: ${diarioHoje.length})`)
+    ok(/há \d+ anos? · \d{4}/.test(await page.textContent('#ini-neste')), 'Neste dia: cada cartão diz há quantos anos e o ano')
+    await page.click('#ini-neste .neste'); await dorme(800)
+    ok(await page.isVisible('.pc-topo'), 'Neste dia: tocar no cartão abre a página do diário')
+    await page.goBack().catch(() => {}); await dorme(500)
+  }
   await larguraOk(page, 'Início')
 
   // atualização: o PC muda um nascimento e o Início acompanha depois da troca
