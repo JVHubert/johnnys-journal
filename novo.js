@@ -141,6 +141,7 @@ async function nuvem(rota, corpo, metodo = 'POST', deNovo = false) {
 let T = lerLS('jj-tarefas', null) || { desde: 0, lista: {}, pend: {}, quando: 0 };
 if (DEMO) T = tarefasDeExemplo();
 const salvarT = () => { if (!DEMO) gravarLS('jj-tarefas', T); };
+if (DEMO) window.JJ_TAREFAS = () => T; // para os testes (só no modo de demonstração)
 const vivas = () => Object.values(T.lista).filter((t) => !t.apagada);
 let sincRodando = false, sincTimer = null;
 
@@ -848,13 +849,91 @@ const paraBase64 = (blob) => new Promise((ok, falha) => { const r = new FileRead
 function ditarTarefas() {
   gravarFala({
     titulo: 'Ditando tarefas',
-    aoTarefas: (t) => {
-      const r = lerTarefaRapida(t.frase || t.titulo, hoje());
-      // A escolha de "Para quando?" vale como a data: data null (escolhida "Sem data") não vira a data da fala.
-      criarTarefa({ titulo: t.titulo || r.titulo, data: t.data === undefined ? r.data : t.data, hora: t.hora || r.hora, repetir: t.repetir || r.repetir, projeto: projetoAberto || t.projeto || r.projeto, etiquetas: t.etiquetas?.length ? t.etiquetas : r.etiquetas, importante: t.importante || r.importante, notas: t.notas });
-    },
+    aoTarefas: (t) => criarDaFala(t, projetoAberto),
   });
 }
+// Uma tarefa que a IA tirou de uma fala vira tarefa de verdade. A escolha de "Para quando?" vale como a data:
+// data null (escolhida "Sem data") não vira a data da fala.
+function criarDaFala(t, projetoFixo = null, base = hoje()) {
+  const r = lerTarefaRapida(t.frase || t.titulo, base);
+  criarTarefa({ titulo: t.titulo || r.titulo, data: t.data === undefined ? r.data : t.data, hora: t.hora || r.hora, repetir: t.repetir || r.repetir, projeto: projetoFixo || t.projeto || r.projeto, etiquetas: t.etiquetas?.length ? t.etiquetas : r.etiquetas, importante: t.importante || r.importante, notas: t.notas });
+}
+
+// ---------- tarefas escondidas na entrevista (17/11) ----------
+// Ao terminar a entrevista, a fala inteira vai para a nuvem, que acha tudo o que pode virar tarefa. As que parecem tarefa
+// de verdade vêm marcadas; as vagas vêm desmarcadas para o JV avaliar. Uma tarefa já oferecida naquele dia não volta
+// quando ele revê a entrevista. Sem nada encontrado (ou sem internet), segue direto para o próximo passo.
+const chaveOferecida = (t) => String(t.titulo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+async function tarefasDaEntrevista(k, texto, seguir = () => {}) {
+  const fim = () => { try { seguir(); } catch (err) { /* segue */ } };
+  if (!(texto || '').trim() || !(await buscarLigacao())) return fim();
+  const vistas = lerLS('jj-tarefas-oferecidas') || {};
+  const ja = new Set(vistas[k] || []);
+  const carregando = h(`<div class="tde tde-pensando"><div class="tde-orbita" aria-hidden="true"><i></i><i></i><i></i></div><p>Procurando tarefas na sua fala…</p><button class="link" id="tde-pular">Pular</button></div>`);
+  let pulou = false;
+  abrirCheia(carregando, () => { pulou = true; });
+  carregando.querySelector('#tde-pular').onclick = () => fecharCamada().then(fim);
+  let r;
+  try { r = await nuvem('/tarefas-da-entrevista', { texto, hoje: k, projetos: projetos() }); }
+  catch (err) { r = { tarefas: [] }; }
+  if (pulou) return;
+  const lista = (r.tarefas || []).filter((t) => !ja.has(chaveOferecida(t)));
+  if (!lista.length) { await fecharCamada(); return fim(); }
+  vistas[k] = [...ja, ...lista.map(chaveOferecida)].slice(-80);
+  gravarLS('jj-tarefas-oferecidas', vistas);
+  await fecharCamada();
+  mostrarTarefasDaEntrevista(k, lista, fim);
+}
+function mostrarTarefasDaEntrevista(k, lista, fim) {
+  const quando = lista.map((t) => (t.data ? { data: t.data, hora: t.hora || null } : null));
+  const provaveis = lista.filter((t) => t.provavel).length;
+  const el = h(`<div class="tde">
+    <button class="link" id="tde-agora-nao">Agora não</button>
+    <div class="tde-numero"><b>${lista.length}</b><span>${lista.length === 1 ? 'tarefa' : 'tarefas'} na sua fala</span></div>
+    <p class="tde-sub">${provaveis ? 'As que parecem tarefa já vêm marcadas. ' : ''}${provaveis < lista.length ? 'Confira as outras: podem ser só vontades.' : ''}</p>
+    <div class="tde-lista">${lista.map((t, i) => `<div class="tde-item${t.provavel ? ' marcada' : ''}" style="--i:${i}">
+      <label class="tde-marca"><input type="checkbox" data-i="${i}" ${t.provavel ? 'checked' : ''} aria-label="Criar esta tarefa"><i aria-hidden="true"></i></label>
+      <div class="tde-corpo">
+        <input class="tde-titulo" data-t="${i}" value="${e(t.titulo)}" aria-label="Título da tarefa">
+        ${t.trecho ? `<q class="tde-trecho">${e(t.trecho)}</q>` : ''}
+        <div class="tde-pe"><button type="button" class="tde-quando" data-q="${i}">${t.data ? e(curtoData(t.data) + (t.hora ? ' ' + t.hora : '')) : 'Sem data'}</button>${t.projeto ? `<small>@${e(t.projeto)}</small>` : ''}</div>
+      </div></div>`).join('')}</div>
+    <button class="botao menta grande" id="tde-criar"></button>
+  </div>`);
+  const criarB = el.querySelector('#tde-criar');
+  const conferir = () => {
+    const n = el.querySelectorAll('.tde-lista input:checked').length;
+    criarB.disabled = !n;
+    criarB.textContent = n ? (n === 1 ? 'Criar 1 tarefa' : `Criar ${n} tarefas`) : 'Marque o que vira tarefa';
+  };
+  el.querySelectorAll('.tde-lista input[type="checkbox"]').forEach((c) => (c.onchange = () => { c.closest('.tde-item').classList.toggle('marcada', c.checked); conferir(); }));
+  el.querySelectorAll('.tde-quando').forEach((b) => {
+    const i = Number(b.dataset.q);
+    b.onclick = () => escolherData(quando[i] || {}, (sel) => {
+      quando[i] = sel;
+      b.textContent = sel.data ? curtoData(sel.data) + (sel.hora ? ' ' + sel.hora : '') : 'Sem data';
+    });
+  });
+  let seguiu = false;
+  const seguir = () => { if (!seguiu) { seguiu = true; fim(); } };
+  abrirCheia(el, seguir);
+  el.querySelector('#tde-agora-nao').onclick = () => fecharCamada();
+  criarB.onclick = () => {
+    const marcadas = [...el.querySelectorAll('.tde-lista input:checked')].map((c) => Number(c.dataset.i));
+    marcadas.forEach((i) => {
+      const t = lista[i];
+      const titulo = (el.querySelector(`[data-t="${i}"]`).value || '').trim() || t.titulo;
+      const q = quando[i];
+      // Título mudado à mão: a frase da IA não vale mais. Data: a escolhida na folha, ou a da fala.
+      criarDaFala({ ...t, titulo, frase: titulo === t.titulo ? t.frase : '', data: q ? q.data || null : null, hora: q ? q.hora || null : null, repetir: q ? q.repetir || null : null }, null, k);
+    });
+    fecharCamada();
+    avisar(marcadas.length === 1 ? 'Tarefa criada.' : `${marcadas.length} tarefas criadas.`);
+  };
+  conferir();
+}
+window.tarefasDaEntrevista = tarefasDaEntrevista;
+window.mostrarTarefasDaEntrevista = mostrarTarefasDaEntrevista;
 
 // ================= JOURNAL (estilo Keep) =================
 let filtro = 'tudo', filtroEspaco = null, busca = '';
