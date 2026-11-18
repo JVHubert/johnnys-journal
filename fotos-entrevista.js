@@ -65,10 +65,10 @@ export function comecar({ fotos, rotulo, seg, viagem = false, aviso = () => {} }
   let escondida = false, tocouEm = Date.now()
   const faixa = h(`<section class="ff" aria-label="Fotos ${esc(rotulo)}">
     <div class="ff-topo"><b>${fotos.length} ${fotos.length === 1 ? 'foto' : 'fotos'} ${esc(rotulo)}</b>
-      <span class="ff-conta"><span class="ff-nota" aria-label="na nota">&#9733; <i>0</i></span><span class="ff-lixo" aria-label="para apagar">&#10005; <i>0</i></span></span>
+      <span class="ff-conta"><span class="ff-nota">&#9733; <i>0</i> na nota</span><span class="ff-lixo">&#10005; <i>0</i> no lixo</span></span>
       <button type="button" class="ff-esconder" aria-label="Esconder as fotos">Esconder</button></div>
     <div class="ff-trilho" role="list"></div>
-    <p class="ff-dica">toque para abrir · arraste para cima: lixo</p>
+    <p class="ff-dica">Toque numa foto para abrir. <span class="ff-leg-nota">&#9733; vai para a nota</span>, <span class="ff-leg-lixo">&#10005; vai para o lixo</span>.</p>
   </section>`)
   const trilho = faixa.querySelector('.ff-trilho')
   let diaAnterior = ''
@@ -88,7 +88,6 @@ export function comecar({ fotos, rotulo, seg, viagem = false, aviso = () => {} }
       const id = Number(b.dataset.id)
       b.classList.toggle('na-nota', estado.nota.has(id))
       b.classList.toggle('no-lixo', estado.lixo.has(id))
-      b.classList.toggle('ultima', estado.ultima === id)
     })
     faixa.querySelector('.ff-nota i').textContent = estado.nota.size
     faixa.querySelector('.ff-lixo i').textContent = estado.lixo.size
@@ -135,26 +134,43 @@ export function comecar({ fotos, rotulo, seg, viagem = false, aviso = () => {} }
       viewer.querySelector('.fv-quando b').textContent = hora(f.quando)
       viewer.querySelector('.fv-quando small').textContent = `${DIAS_LONGOS[d.getDay()]} · ${atual + 1} de ${fotos.length}`
       tempo.textContent = mmss(seg())
-      viewer.querySelector('.fv-nota').classList.toggle('ligado', estado.nota.has(f.id))
-      viewer.querySelector('.fv-lixo').classList.toggle('ligado', estado.lixo.has(f.id))
-      // abrir a foto marca o segundo do áudio (abrir de novo marca de novo)
+      botoes()
+      // abrir a foto guarda o segundo do áudio; só vale se ela for para a nota (aí a miniatura fica presa nesse ponto)
       const s = Math.max(0, Math.round(seg()))
       estado.marcos.push({ id: f.id, seg: s })
       estado.ultima = f.id; pintar()
-      toast.textContent = `Foto marcada em ${mmss(s)} do áudio`
-      toast.classList.remove('mostra'); void toast.offsetWidth; toast.classList.add('mostra')
       const mb = trilho.querySelector(`.ff-mini[data-id="${f.id}"]`); if (mb) mb.scrollIntoView({ inline: 'center', block: 'nearest' })
     }
+    const avisar = (t) => { toast.textContent = t; toast.classList.remove('mostra'); void toast.offsetWidth; toast.classList.add('mostra') }
+    const bNota = viewer.querySelector('.fv-nota'), bLixo = viewer.querySelector('.fv-lixo')
+    function botoes() {
+      const id = fotos[atual].id, n = estado.nota.has(id), l = estado.lixo.has(id)
+      bNota.classList.toggle('ligado', n); bNota.setAttribute('aria-pressed', n)
+      bNota.innerHTML = n ? '&#10003; Na nota <small>tocar tira</small>' : 'Pôr na nota'
+      bLixo.classList.toggle('ligado', l); bLixo.setAttribute('aria-pressed', l)
+      bLixo.innerHTML = l ? '&#10005; No lixo <small>tocar tira</small>' : 'Lixo'
+    }
     const ir = (n) => { const p = atual + n; if (p >= 0 && p < fotos.length) { atual = p; mostrar() } }
+    // "Lixo" passa para a seguinte (como no desenho); avisa na seguinte o que aconteceu com a anterior
+    const mandarProLixo = () => {
+      alternarLixo(fotos[atual].id, true)
+      if (atual < fotos.length - 1) { ir(1); avisar('A anterior vai para o lixo (só no fim, com sua confirmação)') } else fechar()
+    }
     viewer.querySelector('.fv-voltar').onclick = fechar
-    viewer.querySelector('.fv-nota').onclick = () => { alternarNota(fotos[atual].id); viewer.querySelector('.fv-nota').classList.toggle('ligado', estado.nota.has(fotos[atual].id)); viewer.querySelector('.fv-lixo').classList.remove('ligado') }
-    viewer.querySelector('.fv-lixo').onclick = () => { alternarLixo(fotos[atual].id, true); if (atual < fotos.length - 1) ir(1); else fechar() }
+    bNota.onclick = () => {
+      const id = fotos[atual].id
+      alternarNota(id); botoes()
+      if (estado.nota.has(id)) { const m = estado.marcos.filter((x) => x.id === id).pop(); avisar(`Vai para a nota, presa em ${mmss(m ? m.seg : seg())} da fala`) }
+      else avisar('Saiu da nota')
+      bNota.classList.remove('pulso'); void bNota.offsetWidth; bNota.classList.add('pulso')
+    }
+    bLixo.onclick = () => { if (estado.lixo.has(fotos[atual].id)) { alternarLixo(fotos[atual].id, false); botoes(); avisar('Saiu do lixo') } else mandarProLixo() }
     let t0 = null
     img.addEventListener('pointerdown', (ev) => { t0 = { x: ev.clientX, y: ev.clientY } })
     img.addEventListener('pointerup', (ev) => {
       if (!t0) return
       const dx = ev.clientX - t0.x, dy = t0.y - ev.clientY; t0 = null
-      if (dy > 90 && Math.abs(dx) < 60) { alternarLixo(fotos[atual].id, true); if (atual < fotos.length - 1) ir(1); else fechar(); return }
+      if (dy > 90 && Math.abs(dx) < 60) { mandarProLixo(); return }
       if (Math.abs(dx) > 60) ir(dx < 0 ? 1 : -1)
     })
     history.pushState({ fotoAberta: true }, '')

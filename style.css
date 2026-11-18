@@ -1231,6 +1231,7 @@ body:has(.grav-escuro) .ff:not(.acordada) { opacity: .5; }
 .ff-topo b { flex: 1; }
 .ff-conta { display: flex; gap: 12px; font-variant-numeric: tabular-nums; font-size: 14px; }
 .ff-nota { color: var(--menta); }
+.ff-conta i { font-style: normal; font-weight: 700; }
 .ff-lixo { color: var(--coral); }
 .ff-esconder { color: var(--apagado); font-size: 13px; min-height: 36px; }
 .ff-trilho { display: flex; gap: 10px; overflow-x: auto; padding: 4px 16px 6px; scroll-snap-type: x proximity; scrollbar-width: none; touch-action: pan-x; }
@@ -1245,7 +1246,9 @@ body:has(.grav-escuro) .ff:not(.acordada) { opacity: .5; }
 .ff-mini.na-nota::after { content: "\2605"; background: var(--menta); color: var(--menta-t); }
 .ff-mini.no-lixo::after { content: "\2715"; background: var(--coral); color: var(--coral-t); }
 .ff-dia { flex: none; align-self: stretch; display: flex; align-items: flex-start; padding: 2px 0 0 8px; border-left: 2px solid var(--violeta); color: var(--violeta); font-size: 12px; font-weight: 700; margin-right: 2px; }
-.ff-dica { margin: 2px 16px 0; color: var(--apagado); font-size: 12.5px; }
+.ff-dica { margin: 2px 16px 0; color: var(--sec); font-size: 13px; }
+.ff-leg-nota { color: var(--menta); }
+.ff-leg-lixo { color: var(--coral); }
 .fv { position: fixed; inset: 0; z-index: 95; background: #000; display: grid; animation: fv-entra .3s cubic-bezier(.2, .8, .2, 1); }
 .fv.saindo { animation: fv-sai .22s ease-in forwards; }
 @keyframes fv-entra { from { opacity: 0; transform: scale(.96); } }
@@ -1262,9 +1265,13 @@ body:has(.grav-escuro) .ff:not(.acordada) { opacity: .5; }
 .fv-pe button { min-height: 52px; border-radius: 16px; font-weight: 700; font-size: 16px; }
 .fv-lixo { border: 1.5px solid var(--coral); color: var(--coral); }
 .fv-lixo.ligado { background: var(--coral); color: var(--coral-t); }
+.fv-pe button small { display: block; font-weight: 400; font-size: 12px; opacity: .8; }
+.fv-nota:not(.ligado) { background: transparent; border: 1.5px solid var(--menta); color: var(--menta); }
+.fv-nota.pulso { animation: fv-pulso .35s ease-out; }
+@keyframes fv-pulso { 50% { transform: scale(1.05); } }
 .fv-nota { background: var(--menta); color: var(--menta-t); }
 .fv-nota.ligado { box-shadow: 0 0 0 3px rgba(110, 226, 154, .35); }
-.fv-toast { position: absolute; left: 50%; top: 76px; transform: translateX(-50%); margin: 0; padding: 8px 14px; border-radius: 99px; background: var(--violeta); color: var(--violeta-t); font-weight: 600; font-size: 14px; opacity: 0; pointer-events: none; white-space: nowrap; }
+.fv-toast { position: absolute; left: 50%; bottom: calc(96px + var(--gesto)); transform: translateX(-50%); margin: 0; padding: 8px 14px; border-radius: 99px; background: var(--elevado); border: 1px solid var(--borda-forte); color: var(--texto); font-weight: 600; font-size: 14px; opacity: 0; pointer-events: none; width: max-content; max-width: calc(100% - 32px); text-align: center; }
 .fv-toast.mostra { animation: fv-toast 2.2s ease-out; }
 @keyframes fv-toast { 0% { opacity: 0; transform: translate(-50%, -8px); } 10%, 75% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
 .fr { position: fixed; inset: 0; z-index: 96; overflow-y: auto; background: var(--base); padding: 20px 16px calc(24px + var(--gesto)); animation: fv-entra .4s cubic-bezier(.2, .8, .2, 1); }

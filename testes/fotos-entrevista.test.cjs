@@ -59,14 +59,18 @@ const IMG = fs.readFileSync(path.join(RAIZ, 'icons', fs.readdirSync(path.join(RA
   await p.click('.ff-mini:nth-child(3)', { force: true });
   await p.waitForSelector('.fv');
   await espera(400);
-  assert.match(await p.textContent('.fv-toast'), /Foto marcada em 01:15 do áudio/);
   assert.match(await p.textContent('.fv-quando small'), /3 de 12/);
-  await print('2-foto-aberta');
+  assert.match(await p.textContent('.fv-nota'), /Pôr na nota/);
   await p.click('.fv-nota');
+  assert.match(await p.textContent('.fv-nota'), /Na nota/, 'o botão diz que a foto está na nota');
+  assert.match(await p.textContent('.fv-toast'), /Vai para a nota, presa em 01:15 da fala/);
+  await espera(300);
+  await print('2-foto-aberta');
   await p.evaluate(() => { window.__seg = 130; });
   await p.click('.fv-lixo');   // marca a 3ª? não: a 3ª está na nota; o lixo vale para a foto aberta e passa para a 4ª
   await espera(300);
   assert.match(await p.textContent('.fv-quando small'), /4 de 12/, 'depois do lixo, passa para a seguinte');
+  assert.match(await p.textContent('.fv-toast'), /A anterior vai para o lixo/);
   await p.click('.fv-nota');   // a 4ª vai para a nota (e marcou 02:10)
   await p.click('.fv-voltar');
   await espera(400);
